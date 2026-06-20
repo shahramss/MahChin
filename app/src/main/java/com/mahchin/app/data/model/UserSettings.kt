@@ -11,7 +11,7 @@ data class UserSettings(
     val endHour: Int = 22,
     val soundEnabled: Boolean = false,
     val vibrationEnabled: Boolean = false,
-    val darkMode: Boolean = false,
+    val darkMode: Boolean = true,
     val backupEnabled: Boolean = true,
     val updatedAt: Long = System.currentTimeMillis()
 )

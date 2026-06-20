@@ -1,19 +1,30 @@
 package com.mahchin.app.ui.screens
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -37,76 +48,125 @@ import com.mahchin.app.ui.viewmodel.MainViewModel
 @Composable
 fun SettingsScreen(vm: MainViewModel) {
     val settings by vm.settings.collectAsState()
+    val message by vm.settingsMessage.collectAsState()
     var expanded by remember { mutableStateOf(false) }
     var startHour by remember(settings.startHour) { mutableStateOf(settings.startHour.toString()) }
     var endHour by remember(settings.endHour) { mutableStateOf(settings.endHour.toString()) }
 
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("تنظیمات", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("یادآوری", fontWeight = FontWeight.Bold)
-                ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
-                    OutlinedTextField(
-                        value = settings.reminderIntensity.fa,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("شدت یادآوری") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-                        modifier = Modifier.menuAnchor().fillMaxWidth()
-                    )
-                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        ReminderIntensity.entries.forEach { intensity ->
-                            DropdownMenuItem(text = { Text(intensity.fa) }, onClick = {
-                                vm.updateSettings { it.copy(reminderIntensity = intensity) }
-                                expanded = false
-                            })
-                        }
-                    }
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = startHour.toPersianDigits(),
-                        onValueChange = { startHour = it.toEnglishDigits().filter { ch -> ch.isDigit() }.take(2) },
-                        label = { Text("شروع") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = endHour.toPersianDigits(),
-                        onValueChange = { endHour = it.toEnglishDigits().filter { ch -> ch.isDigit() }.take(2) },
-                        label = { Text("پایان") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
-                }
-                Button(onClick = {
-                    val s = startHour.toIntOrNull()?.coerceIn(0, 23) ?: 8
-                    val e = endHour.toIntOrNull()?.coerceIn(1, 24) ?: 22
-                    vm.updateSettings { it.copy(startHour = s, endHour = e.coerceAtLeast(s + 1).coerceAtMost(24)) }
-                }, modifier = Modifier.fillMaxWidth()) { Text("ذخیره ساعت یادآوری") }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("تنظیمات", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("یادآوری‌ها را ساده و مطمئن تنظیم کن.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
 
-        SettingSwitch("فعال‌سازی صدا", settings.soundEnabled) { checked -> vm.updateSettings { it.copy(soundEnabled = checked) } }
-        SettingSwitch("فعال‌سازی ویبره", settings.vibrationEnabled) { checked -> vm.updateSettings { it.copy(vibrationEnabled = checked) } }
-        SettingSwitch("حالت تاریک", settings.darkMode) { checked -> vm.updateSettings { it.copy(darkMode = checked) } }
-        SettingSwitch("بکاپ خودکار اندروید", settings.backupEnabled) { checked -> vm.updateSettings { it.copy(backupEnabled = checked) } }
+        if (message != null) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+                ) {
+                    Text(message ?: "", modifier = Modifier.padding(14.dp), color = MaterialTheme.colorScheme.onSurface)
+                }
+            }
+        }
 
-        Text(
-            "بکاپ ساده از طریق Auto Backup اندروید برای دیتابیس فعال شده است. برای نسخه بعدی می‌شود خروجی JSON/فایل دستی هم اضافه کرد.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        item {
+            Card(
+                Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)),
+                elevation = CardDefaults.cardElevation(0.dp)
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Icon(Icons.Outlined.NotificationsActive, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Text("تنظیمات یادآوری", fontWeight = FontWeight.Bold)
+                    }
+
+                    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+                        OutlinedTextField(
+                            value = settings.reminderIntensity.fa,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("شدت یادآوری") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            ReminderIntensity.entries.forEach { intensity ->
+                                DropdownMenuItem(text = { Text(intensity.fa) }, onClick = {
+                                    vm.updateSettings { it.copy(reminderIntensity = intensity) }
+                                    expanded = false
+                                })
+                            }
+                        }
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = startHour.toPersianDigits(),
+                            onValueChange = { startHour = it.toEnglishDigits().filter { ch -> ch.isDigit() }.take(2) },
+                            label = { Text("شروع") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = endHour.toPersianDigits(),
+                            onValueChange = { endHour = it.toEnglishDigits().filter { ch -> ch.isDigit() }.take(2) },
+                            label = { Text("پایان") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                    }
+
+                    Button(onClick = {
+                        val s = startHour.toIntOrNull() ?: 8
+                        val e = endHour.toIntOrNull() ?: 22
+                        vm.saveReminderSettings(s, e)
+                    }, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("ذخیره تنظیمات یادآوری") }
+
+                    OutlinedButton(onClick = vm::sendTestNotification, modifier = Modifier.fillMaxWidth().height(50.dp)) {
+                        Text("ارسال نوتیفیکیشن آزمایشی")
+                    }
+                }
+            }
+        }
+
+        item { SettingSwitch("فعال‌سازی صدا", settings.soundEnabled) { checked -> vm.updateSettings { it.copy(soundEnabled = checked) } } }
+        item { SettingSwitch("فعال‌سازی ویبره", settings.vibrationEnabled) { checked -> vm.updateSettings { it.copy(vibrationEnabled = checked) } } }
+        item { SettingSwitch("حالت تاریک", settings.darkMode) { checked -> vm.updateSettings { it.copy(darkMode = checked) } } }
+        item { SettingSwitch("بکاپ خودکار اندروید", settings.backupEnabled) { checked -> vm.updateSettings { it.copy(backupEnabled = checked) } } }
+
+        item {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "برای اینکه یادآوری‌ها در بعضی گوشی‌ها بهتر کار کند، در تنظیمات گوشی Battery Optimization را برای ماه‌چین محدود نکن.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
 @Composable
 private fun SettingSwitch(title: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    Card(Modifier.fillMaxWidth()) {
+    Card(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)),
+        elevation = CardDefaults.cardElevation(0.dp)
+    ) {
         Row(
             Modifier.fillMaxWidth().padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,

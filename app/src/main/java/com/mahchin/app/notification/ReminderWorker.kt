@@ -1,6 +1,5 @@
 package com.mahchin.app.notification
 
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -32,11 +31,17 @@ class ReminderWorker(
         val today = JalaliCalendar.today()
         val remaining = repo.remainingCount(today)
         if (remaining <= 0) {
-            (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID)
+            NotificationHelper.clearTodayReminder(context)
             return Result.success()
         }
 
-        showNotification(remaining, settings.reminderIntensity == ReminderIntensity.VERY_SERIOUS || settings.soundEnabled, settings.vibrationEnabled || settings.reminderIntensity == ReminderIntensity.VERY_SERIOUS)
+        if (!NotificationHelper.canNotify(context)) return Result.success()
+
+        showNotification(
+            remaining,
+            settings.reminderIntensity == ReminderIntensity.VERY_SERIOUS || settings.soundEnabled,
+            settings.vibrationEnabled || settings.reminderIntensity == ReminderIntensity.VERY_SERIOUS
+        )
         return Result.success()
     }
 

@@ -15,6 +15,7 @@ import com.mahchin.app.data.repository.MonthlyReport
 import com.mahchin.app.data.repository.TaskRepository
 import com.mahchin.app.domain.JalaliCalendar
 import com.mahchin.app.domain.JalaliDate
+import com.mahchin.app.notification.NotificationHelper
 import com.mahchin.app.notification.ReminderScheduler
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -37,6 +38,9 @@ class MainViewModel(
 
     private val _calendarMonth = MutableStateFlow(JalaliDate(today.year, today.month, 1))
     val calendarMonth: StateFlow<JalaliDate> = _calendarMonth
+
+    private val _settingsMessage = MutableStateFlow<String?>(null)
+    val settingsMessage: StateFlow<String?> = _settingsMessage
 
     val settings: StateFlow<UserSettings> = repository.settingsFlow.stateIn(
         viewModelScope,
@@ -100,12 +104,19 @@ class MainViewModel(
 
     fun addOneTimeTask(date: JalaliDate, title: String, description: String, priority: TaskPriority) {
         if (title.isBlank()) return
-        viewModelScope.launch { repository.addOneTimeTask(date, title, description, priority) }
+        viewModelScope.launch {
+            repository.addOneTimeTask(date, title, description, priority)
+            ReminderScheduler.scheduleImmediateCheck(app)
+        }
     }
 
     fun addTemplateTask(title: String, description: String, dayOfMonth: Int, priority: TaskPriority) {
         if (title.isBlank()) return
-        viewModelScope.launch { repository.addTemplateTask(title, description, dayOfMonth, priority) }
+        viewModelScope.launch {
+            repository.addTemplateTask(title, description, dayOfMonth, priority)
+            repository.ensureTasksForDate(today)
+            ReminderScheduler.scheduleImmediateCheck(app)
+        }
     }
 
     fun updateTemplate(id: Long, title: String, description: String, dayOfMonth: Int, priority: TaskPriority) {
@@ -122,28 +133,66 @@ class MainViewModel(
     fun cancelToday(item: TaskItem) = setStatus(item, TaskStatus.CANCELED)
 
     fun setStatus(item: TaskItem, status: TaskStatus) {
-        viewModelScope.launch { repository.setStatus(item, status) }
+        viewModelScope.launch {
+            repository.setStatus(item, status)
+            ReminderScheduler.scheduleImmediateCheck(app)
+        }
     }
 
     fun editOnlyThisDate(item: TaskItem, title: String, description: String, priority: TaskPriority) {
         if (title.isBlank()) return
-        viewModelScope.launch { repository.editTaskOnlyThisDate(item, title, description, priority) }
+        viewModelScope.launch {
+            repository.editTaskOnlyThisDate(item, title, description, priority)
+            ReminderScheduler.scheduleImmediateCheck(app)
+        }
     }
 
     fun deleteTask(item: TaskItem) {
-        viewModelScope.launch { repository.deleteTask(item) }
+        viewModelScope.launch {
+            repository.deleteTask(item)
+            ReminderScheduler.scheduleImmediateCheck(app)
+        }
     }
 
     fun moveToTomorrow(item: TaskItem) {
-        viewModelScope.launch { repository.moveTaskToTomorrow(item) }
+        viewModelScope.launch {
+            repository.moveTaskToTomorrow(item)
+            ReminderScheduler.scheduleImmediateCheck(app)
+        }
     }
 
     fun moveToCustomDate(item: TaskItem, date: JalaliDate) {
-        viewModelScope.launch { repository.moveTaskToDate(item, date) }
+        viewModelScope.launch {
+            repository.moveTaskToDate(item, date)
+            ReminderScheduler.scheduleImmediateCheck(app)
+        }
     }
 
     fun moveAllRemainingTodayToTomorrow() {
-        viewModelScope.launch { repository.moveRemainingToTomorrow(today) }
+        viewModelScope.launch {
+            repository.moveRemainingToTomorrow(today)
+            ReminderScheduler.scheduleImmediateCheck(app)
+        }
+    }
+
+    fun saveReminderSettings(startHour: Int, endHour: Int) {
+        val start = startHour.coerceIn(0, 23)
+        val end = endHour.coerceIn(1, 24).coerceAtLeast((start + 1).coerceAtMost(24))
+        updateSettings { it.copy(startHour = start, endHour = end) }
+        _settingsMessage.value = "تنظیمات یادآوری ذخیره شد و زمان‌بندی دوباره فعال شد."
+    }
+
+    fun sendTestNotification() {
+        val ok = NotificationHelper.showTestNotification(app)
+        _settingsMessage.value = if (ok) {
+            "نوتیفیکیشن آزمایشی ارسال شد."
+        } else {
+            "مجوز نوتیفیکیشن فعال نیست. از تنظیمات گوشی اجازه Notification را بده."
+        }
+    }
+
+    fun clearSettingsMessage() {
+        _settingsMessage.value = null
     }
 
     fun updateSettings(transform: (UserSettings) -> UserSettings) {

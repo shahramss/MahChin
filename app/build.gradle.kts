@@ -12,15 +12,35 @@ android {
         applicationId = "com.mahchin.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            val keyStorePath = System.getenv("MAHCHIN_KEYSTORE")
+            if (!keyStorePath.isNullOrBlank()) {
+                storeFile = file(keyStorePath)
+                storePassword = System.getenv("MAHCHIN_KEYSTORE_PASSWORD") ?: "mahchin1234"
+                keyAlias = System.getenv("MAHCHIN_KEY_ALIAS") ?: "mahchin"
+                keyPassword = System.getenv("MAHCHIN_KEY_PASSWORD") ?: "mahchin1234"
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            isDebuggable = true
+        }
         release {
+            isDebuggable = false
             isMinifyEnabled = false
+            val keyStorePath = System.getenv("MAHCHIN_KEYSTORE")
+            if (!keyStorePath.isNullOrBlank()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
