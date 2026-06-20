@@ -14,6 +14,7 @@ import com.mahchin.app.data.db.AppDatabase
 import com.mahchin.app.data.model.ReminderIntensity
 import com.mahchin.app.data.repository.TaskRepository
 import com.mahchin.app.domain.JalaliCalendar
+import com.mahchin.app.domain.toPersianDigits
 import java.time.LocalTime
 
 class ReminderWorker(
@@ -29,8 +30,10 @@ class ReminderWorker(
         if (nowHour < settings.startHour || nowHour >= settings.endHour) return Result.success()
 
         val today = JalaliCalendar.today()
-        val remaining = repo.remainingCount(today)
-        if (remaining <= 0) {
+        val remainingTasks = repo.getTasksForDate(today)
+            .filter { it.status == com.mahchin.app.data.model.TaskStatus.NOT_STARTED || it.status == com.mahchin.app.data.model.TaskStatus.IN_PROGRESS }
+
+        if (remainingTasks.isEmpty()) {
             NotificationHelper.clearTodayReminder(context)
             return Result.success()
         }
@@ -38,14 +41,14 @@ class ReminderWorker(
         if (!NotificationHelper.canNotify(context)) return Result.success()
 
         showNotification(
-            remaining,
+            remainingTasks.map { it.title },
             settings.reminderIntensity == ReminderIntensity.VERY_SERIOUS || settings.soundEnabled,
             settings.vibrationEnabled || settings.reminderIntensity == ReminderIntensity.VERY_SERIOUS
         )
         return Result.success()
     }
 
-    private fun showNotification(remaining: Int, sound: Boolean, vibrate: Boolean) {
+    private fun showNotification(remainingTitles: List<String>, sound: Boolean, vibrate: Boolean) {
         val openIntent = Intent(context, MainActivity::class.java)
         val openPendingIntent = PendingIntent.getActivity(
             context,
@@ -54,34 +57,27 @@ class ReminderWorker(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val snoozeIntent = Intent(context, ReminderActionReceiver::class.java).apply { action = ReminderActionReceiver.ACTION_SNOOZE }
-        val snoozePendingIntent = PendingIntent.getBroadcast(
-            context,
-            11,
-            snoozeIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val moveIntent = Intent(context, ReminderActionReceiver::class.java).apply { action = ReminderActionReceiver.ACTION_MOVE_TO_TOMORROW }
-        val movePendingIntent = PendingIntent.getBroadcast(
-            context,
-            12,
-            moveIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
         val channel = if (sound || vibrate) NotificationChannels.CHANNEL_STRICT else NotificationChannels.CHANNEL_NORMAL
+        val countText = remainingTitles.size.toPersianDigits()
+        val inboxStyle = NotificationCompat.InboxStyle()
+            .setBigContentTitle("$countText کار باقی مانده")
+            .setSummaryText("برای تیک زدن، وارد برنامه شو")
+        remainingTitles.take(5).forEach { title ->
+            inboxStyle.addLine("☐ $title")
+        }
+        if (remainingTitles.size > 5) {
+            inboxStyle.addLine("+ ${(remainingTitles.size - 5).toPersianDigits()} کار دیگر")
+        }
+
         val builder = NotificationCompat.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_launcher)
-            .setContentTitle("برنامه امروز کامل نشده")
-            .setContentText("${remaining} کار از امروز باقی مانده.")
-            .setStyle(NotificationCompat.BigTextStyle().bigText("چند کار از امروز باقی مانده. برای مدیریت برنامه امروز وارد ماه‌چین شو."))
+            .setContentTitle("$countText کار باقی مانده")
+            .setContentText("لیست امروز آماده تیک زدن است.")
+            .setStyle(inboxStyle)
             .setPriority(if (sound || vibrate) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(openPendingIntent)
             .setAutoCancel(false)
-            .addAction(R.drawable.ic_launcher, "نمایش برنامه", openPendingIntent)
-            .addAction(R.drawable.ic_launcher, "یادآوری ۱ ساعت دیگر", snoozePendingIntent)
-            .addAction(R.drawable.ic_launcher, "انتقال باقی‌مانده‌ها به فردا", movePendingIntent)
+            .addAction(R.drawable.ic_launcher, "باز کردن لیست", openPendingIntent)
 
         if (!sound && Build.VERSION.SDK_INT < Build.VERSION_CODES.O) builder.setSilent(true)
         if (vibrate) builder.setVibrate(longArrayOf(0, 300, 150, 300))

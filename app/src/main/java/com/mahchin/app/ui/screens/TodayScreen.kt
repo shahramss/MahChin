@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -39,7 +38,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.mahchin.app.data.model.TaskItem
-import com.mahchin.app.data.model.TaskPriority
 import com.mahchin.app.domain.JalaliCalendar
 import com.mahchin.app.domain.toPersianDigits
 import com.mahchin.app.ui.components.JalaliDateDialog
@@ -67,54 +65,37 @@ fun TodayScreen(vm: MainViewModel) {
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 14.dp, end = 14.dp, top = 16.dp, bottom = 92.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp)
         ) {
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        "تسک‌های امروز",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Text(
-                        "${JalaliCalendar.weekdayName(today)}، ${today.display}",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            item {
-                Card(
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(26.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)),
-                    elevation = CardDefaults.cardElevation(0.dp)
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("پیشرفت امروز", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                Text(
-                                    "${done.toPersianDigits()} بسته‌شده از ${tasks.size.toPersianDigits()} تسک",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Text(
-                                "${(progress * 100).toInt().toPersianDigits()}٪",
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text(
-                            if (remaining > 0) "${remaining.toPersianDigits()} کار هنوز باز است." else "برنامه امروز کامل شده؛ یادآوری قطع می‌شود.",
+                            "امروز",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Text(
+                            "${JalaliCalendar.weekdayName(today)}، ${today.display}",
+                            style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                    Button(
+                        onClick = { addDialog = true },
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 10.dp)
+                    ) {
+                        Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(19.dp))
+                        Spacer(Modifier.size(6.dp))
+                        Text("تسک")
                     }
                 }
             }
@@ -123,40 +104,41 @@ fun TodayScreen(vm: MainViewModel) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(22.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.38f)),
                     elevation = CardDefaults.cardElevation(0.dp)
                 ) {
-                    Row(
-                        Modifier.fillMaxWidth().padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(Icons.Outlined.NotificationsActive, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("یادآوری: ${settings.reminderIntensity.fa}", fontWeight = FontWeight.Bold)
-                            Text("از ${settings.startHour.toPersianDigits()} تا ${settings.endHour.toPersianDigits()}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "${done.toPersianDigits()} انجام‌شده",
+                                modifier = Modifier.weight(1f),
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "${remaining.toPersianDigits()} باقی‌مانده",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
+                        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+                        Text(
+                            "یادآوری ${settings.reminderIntensity.fa} از ${settings.startHour.toPersianDigits()} تا ${settings.endHour.toPersianDigits()}  •  برای گزینه‌های تسک، کارت را نگه دار.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
 
-            item {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = { addDialog = true },
-                        modifier = Modifier.weight(1f).height(52.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                    ) {
-                        Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.size(8.dp))
-                        Text("افزودن تسک")
-                    }
+            if (remaining > 0) {
+                item {
                     OutlinedButton(
                         onClick = vm::moveAllRemainingTodayToTomorrow,
-                        modifier = Modifier.weight(1f).height(52.dp),
-                        enabled = remaining > 0
-                    ) { Text("انتقال باقی‌مانده‌ها") }
+                        modifier = Modifier.fillMaxWidth().height(44.dp),
+                        shape = RoundedCornerShape(15.dp)
+                    ) { Text("انتقال همه کارهای باز به فردا") }
                 }
             }
 
@@ -164,13 +146,13 @@ fun TodayScreen(vm: MainViewModel) {
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(22.dp),
+                        shape = RoundedCornerShape(20.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         elevation = CardDefaults.cardElevation(0.dp)
                     ) {
                         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("امروز خلوت است", fontWeight = FontWeight.Bold)
-                            Text("از دکمه افزودن تسک استفاده کن یا برنامه ثابت را از بخش قالب ماهانه بچین.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("یک تسک اضافه کن یا برنامه ثابت را از قالب ماهانه بچین.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                             FilledTonalButton(onClick = { addDialog = true }) { Text("افزودن اولین تسک") }
                         }
                     }
