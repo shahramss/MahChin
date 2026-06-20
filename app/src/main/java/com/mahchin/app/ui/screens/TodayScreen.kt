@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -65,50 +66,34 @@ fun TodayScreen(vm: MainViewModel) {
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 14.dp, end = 14.dp, top = 16.dp, bottom = 92.dp),
-            verticalArrangement = Arrangement.spacedBy(9.dp)
+            contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 16.dp, bottom = 98.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text(
-                            "امروز",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        Text(
-                            "${JalaliCalendar.weekdayName(today)}، ${today.display}",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Button(
-                        onClick = { addDialog = true },
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 10.dp)
-                    ) {
-                        Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(19.dp))
-                        Spacer(Modifier.size(6.dp))
-                        Text("تسک")
-                    }
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(
+                        "امروز",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        "${JalaliCalendar.weekdayName(today)}، ${today.display}",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(22.dp),
+                    shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.38f)),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.30f)),
                     elevation = CardDefaults.cardElevation(0.dp)
                 ) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 "${done.toPersianDigits()} انجام‌شده",
@@ -124,9 +109,14 @@ fun TodayScreen(vm: MainViewModel) {
                         }
                         LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
                         Text(
-                            "یادآوری ${settings.reminderIntensity.fa} از ${settings.startHour.toPersianDigits()} تا ${settings.endHour.toPersianDigits()}  •  برای گزینه‌های تسک، کارت را نگه دار.",
+                            "تیک را دوباره بزنی، برداشته می‌شود. گزینه‌های بیشتر با نگه‌داشتن روی تسک.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            "یادآوری ${settings.reminderIntensity.fa} از ${settings.startHour.toPersianDigits()} تا ${settings.endHour.toPersianDigits()}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f)
                         )
                     }
                 }
@@ -136,8 +126,8 @@ fun TodayScreen(vm: MainViewModel) {
                 item {
                     OutlinedButton(
                         onClick = vm::moveAllRemainingTodayToTomorrow,
-                        modifier = Modifier.fillMaxWidth().height(44.dp),
-                        shape = RoundedCornerShape(15.dp)
+                        modifier = Modifier.fillMaxWidth().height(42.dp),
+                        shape = RoundedCornerShape(14.dp)
                     ) { Text("انتقال همه کارهای باز به فردا") }
                 }
             }
@@ -146,7 +136,7 @@ fun TodayScreen(vm: MainViewModel) {
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(20.dp),
+                        shape = RoundedCornerShape(18.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         elevation = CardDefaults.cardElevation(0.dp)
                     ) {
@@ -161,16 +151,33 @@ fun TodayScreen(vm: MainViewModel) {
                 items(tasks, key = { it.origin.name + it.id }) { task ->
                     TaskCard(
                         task = task,
-                        onDone = { vm.complete(task) },
+                        onDone = { vm.toggleDone(task) },
                         onEdit = { editTask = task },
                         onDelete = { vm.deleteTask(task) },
                         onMoveTomorrow = { vm.moveToTomorrow(task) },
                         onMoveCustom = { moveTask = task },
                         onCancel = { vm.cancelToday(task) },
-                        onInProgress = { vm.inProgress(task) }
+                        onInProgress = { vm.inProgress(task) },
+                        onReset = { vm.resetStatus(task) }
                     )
                 }
             }
+        }
+
+        Button(
+            onClick = { addDialog = true },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = 14.dp, vertical = 12.dp)
+                .fillMaxWidth()
+                .height(54.dp),
+            shape = RoundedCornerShape(18.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+            contentPadding = PaddingValues(horizontal = 18.dp)
+        ) {
+            Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(21.dp))
+            Spacer(Modifier.size(8.dp))
+            Text("افزودن تسک امروز", fontWeight = FontWeight.Bold)
         }
     }
 

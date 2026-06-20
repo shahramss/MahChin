@@ -64,6 +64,12 @@ class TaskRepository(private val dao: TaskDao) {
         dao.getTemplate(id)?.let { dao.updateTemplate(it.copy(isActive = false, updatedAt = System.currentTimeMillis())) }
     }
 
+    suspend fun setTemplateStatus(id: Long, status: TaskStatus) = withContext(Dispatchers.IO) {
+        dao.getTemplate(id)?.let {
+            dao.updateTemplate(it.copy(status = status, updatedAt = System.currentTimeMillis()))
+        }
+    }
+
     suspend fun addOneTimeTask(date: JalaliDate, title: String, description: String, priority: TaskPriority) = withContext(Dispatchers.IO) {
         dao.insertOneTimeTask(
             OneTimeTask(

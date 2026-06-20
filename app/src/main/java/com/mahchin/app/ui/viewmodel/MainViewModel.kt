@@ -129,8 +129,18 @@ class MainViewModel(
     }
 
     fun complete(item: TaskItem) = setStatus(item, TaskStatus.DONE)
+    fun toggleDone(item: TaskItem) = setStatus(
+        item,
+        if (item.status == TaskStatus.DONE) TaskStatus.NOT_STARTED else TaskStatus.DONE
+    )
+    fun resetStatus(item: TaskItem) = setStatus(item, TaskStatus.NOT_STARTED)
     fun inProgress(item: TaskItem) = setStatus(item, TaskStatus.IN_PROGRESS)
     fun cancelToday(item: TaskItem) = setStatus(item, TaskStatus.CANCELED)
+
+    fun toggleTemplateDone(template: MonthlyTemplateTask) {
+        val next = if (template.status == TaskStatus.DONE) TaskStatus.NOT_STARTED else TaskStatus.DONE
+        viewModelScope.launch { repository.setTemplateStatus(template.id, next) }
+    }
 
     fun setStatus(item: TaskItem, status: TaskStatus) {
         viewModelScope.launch {

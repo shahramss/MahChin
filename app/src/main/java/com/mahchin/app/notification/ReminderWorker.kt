@@ -60,24 +60,24 @@ class ReminderWorker(
         val channel = if (sound || vibrate) NotificationChannels.CHANNEL_STRICT else NotificationChannels.CHANNEL_NORMAL
         val countText = remainingTitles.size.toPersianDigits()
         val inboxStyle = NotificationCompat.InboxStyle()
-            .setBigContentTitle("$countText کار باقی مانده")
-            .setSummaryText("برای تیک زدن، وارد برنامه شو")
-        remainingTitles.take(5).forEach { title ->
+            .setBigContentTitle("کارهای باز امروز")
+            .setSummaryText("$countText کار باقی مانده")
+        remainingTitles.take(4).forEach { title ->
             inboxStyle.addLine("☐ $title")
         }
-        if (remainingTitles.size > 5) {
-            inboxStyle.addLine("+ ${(remainingTitles.size - 5).toPersianDigits()} کار دیگر")
+        if (remainingTitles.size > 4) {
+            inboxStyle.addLine("+ ${(remainingTitles.size - 4).toPersianDigits()} مورد دیگر")
         }
 
         val builder = NotificationCompat.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_launcher)
-            .setContentTitle("$countText کار باقی مانده")
-            .setContentText("لیست امروز آماده تیک زدن است.")
+            .setContentTitle("کارهای باز امروز")
+            .setContentText("$countText کار باقی مانده؛ برای تیک زدن وارد ماه‌چین شو.")
             .setStyle(inboxStyle)
             .setPriority(if (sound || vibrate) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(openPendingIntent)
             .setAutoCancel(false)
-            .addAction(R.drawable.ic_launcher, "باز کردن لیست", openPendingIntent)
+            .addAction(R.drawable.ic_launcher, "باز کردن", openPendingIntent)
 
         if (!sound && Build.VERSION.SDK_INT < Build.VERSION_CODES.O) builder.setSilent(true)
         if (vibrate) builder.setVibrate(longArrayOf(0, 300, 150, 300))

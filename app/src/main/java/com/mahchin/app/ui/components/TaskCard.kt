@@ -3,8 +3,8 @@ package com.mahchin.app.ui.components
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -62,6 +62,7 @@ fun TaskCard(
     onMoveCustom: () -> Unit,
     onCancel: () -> Unit,
     onInProgress: () -> Unit,
+    onReset: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val closed = task.status.isClosed()
@@ -89,42 +90,41 @@ fun TaskCard(
                 onClick = { },
                 onLongClick = { showActions = true }
             ),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (closed) {
-                MaterialTheme.colorScheme.surface.copy(alpha = 0.62f)
+                MaterialTheme.colorScheme.surface.copy(alpha = 0.58f)
             } else {
                 MaterialTheme.colorScheme.surface
             }
         ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.26f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             IconButton(
-                onClick = { if (!closed) onDone() },
-                enabled = !closed,
-                modifier = Modifier.size(42.dp)
+                onClick = onDone,
+                modifier = Modifier.size(38.dp)
             ) {
                 Icon(
                     imageVector = if (task.status == TaskStatus.DONE) Icons.Outlined.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
-                    contentDescription = "انجام شد",
+                    contentDescription = if (task.status == TaskStatus.DONE) "برداشتن تیک" else "انجام شد",
                     tint = if (task.status == TaskStatus.DONE) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                    modifier = Modifier.size(27.dp)
+                    modifier = Modifier.size(26.dp)
                 )
             }
 
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(5.dp)
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         text = task.title,
                         modifier = Modifier.weight(1f),
@@ -169,7 +169,7 @@ fun TaskCard(
                 }
             }
 
-            IconButton(onClick = { showActions = true }, modifier = Modifier.size(38.dp)) {
+            IconButton(onClick = { showActions = true }, modifier = Modifier.size(34.dp)) {
                 Icon(
                     Icons.Outlined.MoreVert,
                     contentDescription = "گزینه‌های تسک",
@@ -190,7 +190,7 @@ fun TaskCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 18.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 Text(
                     text = task.title,
@@ -201,19 +201,29 @@ fun TaskCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "برای خلوت ماندن صفحه، گزینه‌های هر تسک اینجا قرار گرفته‌اند.",
+                    text = "برای خلوت ماندن صفحه، گزینه‌ها با نگه‌داشتن روی تسک باز می‌شوند.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.height(8.dp))
+
+                ActionRow(
+                    if (task.status == TaskStatus.DONE) "برداشتن تیک" else "انجام شد",
+                    if (task.status == TaskStatus.DONE) Icons.Outlined.RadioButtonUnchecked else Icons.Outlined.CheckCircle
+                ) { showActions = false; onDone() }
+
+                if (task.status != TaskStatus.NOT_STARTED && onReset != null) {
+                    ActionRow("برگردان به انجام‌نشده", Icons.Outlined.RadioButtonUnchecked) { showActions = false; onReset() }
+                }
+
                 if (!closed) {
-                    ActionRow("انجام شد", Icons.Outlined.CheckCircle) { showActions = false; onDone() }
                     ActionRow("در حال انجام", Icons.Outlined.RadioButtonUnchecked) { showActions = false; onInProgress() }
                     ActionRow("انتقال به فردا", Icons.Outlined.KeyboardArrowLeft) { showActions = false; onMoveTomorrow() }
                     ActionRow("انتقال به تاریخ دلخواه", Icons.Outlined.KeyboardArrowLeft) { showActions = false; onMoveCustom() }
                     ActionRow("لغو برای امروز", Icons.Outlined.Close) { showActions = false; onCancel() }
-                    HorizontalDivider(Modifier.padding(vertical = 6.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f))
                 }
+
+                HorizontalDivider(Modifier.padding(vertical = 6.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
                 ActionRow("ویرایش", Icons.Outlined.Edit) { showActions = false; onEdit() }
                 ActionRow("حذف", Icons.Outlined.Delete, danger = true) { showActions = false; onDelete() }
                 Spacer(Modifier.height(18.dp))
@@ -227,7 +237,7 @@ private fun MiniPill(text: String, color: Color) {
     Box(
         modifier = Modifier
             .background(color.copy(alpha = 0.14f), RoundedCornerShape(999.dp))
-            .padding(horizontal = 9.dp, vertical = 3.dp),
+            .padding(horizontal = 8.dp, vertical = 2.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -251,7 +261,7 @@ private fun ActionRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 4.dp, vertical = 13.dp),
+            .padding(horizontal = 4.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -264,7 +274,7 @@ private fun ActionRow(
 private fun StatusDot(color: Color) {
     Box(
         modifier = Modifier
-            .size(8.dp)
+            .size(7.dp)
             .background(color, CircleShape)
     )
 }

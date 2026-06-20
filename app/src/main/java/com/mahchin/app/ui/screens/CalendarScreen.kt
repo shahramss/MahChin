@@ -80,13 +80,14 @@ fun CalendarScreen(vm: MainViewModel) {
             items(selectedTasks, key = { it.origin.name + it.id }) { task ->
                 TaskCard(
                     task = task,
-                    onDone = { vm.complete(task) },
+                    onDone = { vm.toggleDone(task) },
                     onEdit = { editTask = task },
                     onDelete = { vm.deleteTask(task) },
                     onMoveTomorrow = { vm.moveToTomorrow(task) },
                     onMoveCustom = { moveTask = task },
                     onCancel = { vm.cancelToday(task) },
-                    onInProgress = { vm.inProgress(task) }
+                    onInProgress = { vm.inProgress(task) },
+                    onReset = { vm.resetStatus(task) }
                 )
             }
         }
