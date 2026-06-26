@@ -6,6 +6,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -45,13 +46,17 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
@@ -66,13 +71,9 @@ import com.mahchin.app.domain.JalaliDate
 import com.mahchin.app.domain.toEnglishDigits
 import com.mahchin.app.domain.toPersianDigits
 import com.mahchin.app.ui.viewmodel.MainViewModel
-import kotlin.math.PI
-import kotlin.math.cos
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.pow
-import kotlin.math.sin
-import kotlin.math.sqrt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,6 +89,8 @@ fun MindMapScreen(vm: MainViewModel) {
     var distributeDialog by remember { mutableStateOf(false) }
     var actionNode by remember { mutableStateOf<MindMapNode?>(null) }
     var centerActions by remember { mutableStateOf(false) }
+    var selectedNodeId by remember(selectedProjectId) { mutableStateOf<Long?>(null) }
+    val selectedNode = nodes.firstOrNull { it.id == selectedNodeId && it.isActive }
 
     Box(
         modifier = Modifier
@@ -97,19 +100,28 @@ fun MindMapScreen(vm: MainViewModel) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 14.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                "مایندمپ",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                "مثل نقشه ذهنی بساز؛ شاخه‌های نهایی بعداً به تسک‌های روزانه تبدیل می‌شوند.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("مایندمپ", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text(
+                        "فضای آزاد شبیه XMind؛ بکش، زوم کن، بعد شاخه بساز.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                OutlinedButton(
+                    onClick = { distributeDialog = true },
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.height(44.dp)
+                ) { Text("تسک‌سازی") }
+            }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 ExposedDropdownMenuBox(
@@ -121,6 +133,7 @@ fun MindMapScreen(vm: MainViewModel) {
                         value = selectedProject?.name ?: "پروژه",
                         onValueChange = {},
                         readOnly = true,
+                        singleLine = true,
                         label = { Text("پروژه") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(projectMenu) },
                         modifier = Modifier.menuAnchor().fillMaxWidth()
@@ -134,6 +147,7 @@ fun MindMapScreen(vm: MainViewModel) {
                                 text = { Text(project.name) },
                                 onClick = {
                                     vm.selectProject(project.id)
+                                    selectedNodeId = null
                                     projectMenu = false
                                 }
                             )
@@ -147,53 +161,32 @@ fun MindMapScreen(vm: MainViewModel) {
                 ) { Text("پروژه +") }
             }
 
-            MindMapCanvasCard(
+            XMindLikeCanvasCard(
                 projectTitle = selectedProject?.name ?: "پروژه",
                 nodes = nodes,
+                selectedNodeId = selectedNodeId,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                onCenterLongPress = { centerActions = true },
+                onNodeTap = { node -> selectedNodeId = node.id },
+                onCenterTap = { selectedNodeId = null },
                 onNodeLongPress = { actionNode = it },
-                onEmptyMapClick = { nodeDialog = NodeDialogState(parentId = null) }
-            )
-
-            Text(
-                "راهنما: روی نود نگه دار تا زیرشاخه، ویرایش یا حذف باز شود. روی فضای خالی یا دکمه پایین برای افزودن شاخه اصلی بزن.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall
+                onCenterLongPress = { centerActions = true },
+                onEmptyTap = { selectedNodeId = null }
             )
         }
 
-        Row(
+        MindMapBottomBar(
+            selectedNode = selectedNode,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(14.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedButton(
-                onClick = { distributeDialog = true },
-                modifier = Modifier
-                    .weight(1f)
-                    .height(56.dp),
-                shape = RoundedCornerShape(18.dp)
-            ) {
-                Text("تقسیم به تسک")
-            }
-            Button(
-                onClick = { nodeDialog = NodeDialogState(parentId = null) },
-                modifier = Modifier
-                    .weight(1f)
-                    .height(56.dp),
-                shape = RoundedCornerShape(18.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-            ) {
-                Icon(Icons.Outlined.Add, null, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("شاخه اصلی")
-            }
-        }
+                .padding(12.dp),
+            onAddRoot = { nodeDialog = NodeDialogState(parentId = null) },
+            onAddChild = { selectedNode?.let { nodeDialog = NodeDialogState(parentId = it.id) } },
+            onEditSelected = { selectedNode?.let { nodeDialog = NodeDialogState(editNode = it, parentId = it.parentId) } },
+            onDistribute = { distributeDialog = true }
+        )
     }
 
     if (addProjectDialog) {
@@ -201,6 +194,7 @@ fun MindMapScreen(vm: MainViewModel) {
             onDismiss = { addProjectDialog = false },
             onSave = {
                 vm.addProject(it)
+                selectedNodeId = null
                 addProjectDialog = false
             }
         )
@@ -235,7 +229,7 @@ fun MindMapScreen(vm: MainViewModel) {
     if (centerActions) {
         MindMapActionSheet(
             title = selectedProject?.name ?: "پروژه",
-            subtitle = "این نود مرکزی پروژه است.",
+            subtitle = "نود مرکزی پروژه است. شاخه اصلی از همین‌جا شروع می‌شود.",
             onDismiss = { centerActions = false },
             actions = listOf(
                 MindAction("افزودن شاخه اصلی", Icons.Outlined.Add) {
@@ -254,7 +248,12 @@ fun MindMapScreen(vm: MainViewModel) {
             actions = listOf(
                 MindAction("افزودن زیرشاخه", Icons.Outlined.Add) {
                     actionNode = null
+                    selectedNodeId = node.id
                     nodeDialog = NodeDialogState(parentId = node.id)
+                },
+                MindAction("افزودن شاخه کنار این", Icons.Outlined.Add) {
+                    actionNode = null
+                    nodeDialog = NodeDialogState(parentId = node.parentId)
                 },
                 MindAction("ویرایش", Icons.Outlined.Edit) {
                     actionNode = null
@@ -262,6 +261,7 @@ fun MindMapScreen(vm: MainViewModel) {
                 },
                 MindAction("حذف", Icons.Outlined.Delete, danger = true) {
                     actionNode = null
+                    if (selectedNodeId == node.id) selectedNodeId = null
                     vm.deleteMindMapNode(node.id)
                 }
             )
@@ -270,117 +270,238 @@ fun MindMapScreen(vm: MainViewModel) {
 }
 
 data class NodeDialogState(val editNode: MindMapNode? = null, val parentId: Long? = null)
+
 private data class GraphNode(
     val node: MindMapNode?,
     val title: String,
-    val position: Offset,
-    val radius: Float,
+    val center: Offset,
+    val width: Float,
+    val height: Float,
     val color: Color,
     val textColor: Color,
-    val level: Int
+    val level: Int,
+    val side: Int,
+    val selected: Boolean = false
 )
 
-private data class GraphLine(val from: Offset, val to: Offset, val color: Color)
-
+private data class GraphLine(val from: Offset, val to: Offset, val color: Color, val side: Int)
 private data class MindGraphLayout(val nodes: List<GraphNode>, val lines: List<GraphLine>)
 
 @Composable
-private fun MindMapCanvasCard(
+private fun XMindLikeCanvasCard(
     projectTitle: String,
     nodes: List<MindMapNode>,
+    selectedNodeId: Long?,
     modifier: Modifier,
-    onCenterLongPress: () -> Unit,
+    onNodeTap: (MindMapNode) -> Unit,
+    onCenterTap: () -> Unit,
     onNodeLongPress: (MindMapNode) -> Unit,
-    onEmptyMapClick: () -> Unit
+    onCenterLongPress: () -> Unit,
+    onEmptyTap: () -> Unit
 ) {
-    val primary = MaterialTheme.colorScheme.primary
     val surface = MaterialTheme.colorScheme.surface
     val outline = MaterialTheme.colorScheme.outline
-    val onSurface = MaterialTheme.colorScheme.onSurface
+    val primary = MaterialTheme.colorScheme.primary
     val onPrimary = MaterialTheme.colorScheme.onPrimary
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
     val density = LocalDensity.current
+    var scale by remember { mutableFloatStateOf(1f) }
+    var pan by remember { mutableStateOf(Offset.Zero) }
 
     Card(
-        modifier = modifier.padding(bottom = 70.dp),
+        modifier = modifier.padding(bottom = 82.dp),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = surface),
-        border = BorderStroke(1.dp, outline.copy(alpha = 0.18f)),
+        border = BorderStroke(1.dp, outline.copy(alpha = 0.14f)),
         elevation = CardDefaults.cardElevation(0.dp)
     ) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val w = with(density) { maxWidth.toPx() }
             val h = with(density) { maxHeight.toPx() }
-            val graph = remember(projectTitle, nodes, w, h, primary, onSurface, onPrimary) {
-                buildMindGraph(projectTitle, nodes, w, h, primary, onSurface, onPrimary)
+            val origin = Offset(w / 2f, h / 2f) + pan
+            val graph = remember(projectTitle, nodes, selectedNodeId, primary, onPrimary, onSurface) {
+                buildXMindGraph(projectTitle, nodes, selectedNodeId, primary, onPrimary, onSurface)
             }
 
             Canvas(
                 modifier = Modifier
                     .fillMaxSize()
-                    .pointerInput(graph) {
+                    .pointerInput(Unit) {
+                        detectTransformGestures { _, panChange, zoomChange, _ ->
+                            pan += panChange
+                            scale = (scale * zoomChange).coerceIn(0.45f, 2.4f)
+                        }
+                    }
+                    .pointerInput(graph, scale, pan) {
                         detectTapGestures(
                             onTap = { tap ->
-                                val hit = graph.nodes.asReversed().firstOrNull { tap.distanceTo(it.position) <= it.radius + 10f }
-                                if (hit == null) onEmptyMapClick()
+                                val worldTap = screenToWorld(tap, origin, scale)
+                                val hit = graph.nodes.asReversed().firstOrNull { it.hit(worldTap) }
+                                when {
+                                    hit?.node != null -> onNodeTap(hit.node)
+                                    hit != null -> onCenterTap()
+                                    else -> onEmptyTap()
+                                }
                             },
                             onLongPress = { tap ->
-                                val hit = graph.nodes.asReversed().firstOrNull { tap.distanceTo(it.position) <= it.radius + 14f }
+                                val worldTap = screenToWorld(tap, origin, scale)
+                                val hit = graph.nodes.asReversed().firstOrNull { it.hit(worldTap) }
                                 when {
                                     hit?.node != null -> onNodeLongPress(hit.node)
                                     hit != null -> onCenterLongPress()
-                                    else -> onEmptyMapClick()
+                                    else -> onEmptyTap()
                                 }
                             }
                         )
                     }
             ) {
+                val gridColor = outline.copy(alpha = 0.08f)
+                val grid = 64f * scale
+                if (grid >= 24f) {
+                    var x = (origin.x % grid) - grid
+                    while (x < size.width + grid) {
+                        var y = (origin.y % grid) - grid
+                        while (y < size.height + grid) {
+                            drawCircle(gridColor, radius = 1.4f, center = Offset(x, y))
+                            y += grid
+                        }
+                        x += grid
+                    }
+                }
+
                 graph.lines.forEach { line ->
-                    drawLine(
-                        color = line.color.copy(alpha = 0.78f),
-                        start = line.from,
-                        end = line.to,
-                        strokeWidth = 4.2f
+                    val start = worldToScreen(line.from, origin, scale)
+                    val end = worldToScreen(line.to, origin, scale)
+                    val controlDistance = (abs(end.x - start.x) * 0.55f).coerceAtLeast(90f * scale)
+                    val c1 = Offset(start.x + controlDistance * line.side, start.y)
+                    val c2 = Offset(end.x - controlDistance * line.side, end.y)
+                    val path = Path().apply {
+                        moveTo(start.x, start.y)
+                        cubicTo(c1.x, c1.y, c2.x, c2.y, end.x, end.y)
+                    }
+                    drawPath(
+                        path = path,
+                        color = line.color.copy(alpha = 0.82f),
+                        style = Stroke(width = 4.5f * scale.coerceIn(0.7f, 1.2f))
                     )
                 }
 
                 graph.nodes.forEach { graphNode ->
-                    drawCircle(
-                        color = graphNode.color.copy(alpha = if (graphNode.level == 0) 0.22f else 0.12f),
-                        radius = graphNode.radius + 9f,
-                        center = graphNode.position,
-                        style = Stroke(width = 2.2f)
+                    val center = worldToScreen(graphNode.center, origin, scale)
+                    val nodeW = graphNode.width * scale
+                    val nodeH = graphNode.height * scale
+                    val topLeft = Offset(center.x - nodeW / 2f, center.y - nodeH / 2f)
+                    val radius = CornerRadius(18f * scale, 18f * scale)
+
+                    drawRoundRect(
+                        color = if (graphNode.level == 0) graphNode.color.copy(alpha = 0.22f) else graphNode.color.copy(alpha = 0.13f),
+                        topLeft = topLeft - Offset(7f * scale, 7f * scale),
+                        size = Size(nodeW + 14f * scale, nodeH + 14f * scale),
+                        cornerRadius = CornerRadius(24f * scale, 24f * scale),
+                        style = Stroke(width = if (graphNode.selected) 4.5f * scale else 2.4f * scale)
                     )
-                    drawCircle(
-                        color = graphNode.color,
-                        radius = graphNode.radius,
-                        center = graphNode.position
+                    drawRoundRect(
+                        color = if (graphNode.level <= 1) graphNode.color else surface,
+                        topLeft = topLeft,
+                        size = Size(nodeW, nodeH),
+                        cornerRadius = radius
                     )
+                    if (graphNode.level >= 2) {
+                        drawRoundRect(
+                            color = graphNode.color.copy(alpha = if (graphNode.selected) 0.95f else 0.55f),
+                            topLeft = topLeft,
+                            size = Size(8f * scale, nodeH),
+                            cornerRadius = CornerRadius(18f * scale, 18f * scale)
+                        )
+                    }
+                    if (graphNode.selected) {
+                        drawRoundRect(
+                            color = graphNode.color,
+                            topLeft = topLeft,
+                            size = Size(nodeW, nodeH),
+                            cornerRadius = radius,
+                            style = Stroke(width = 3.2f * scale)
+                        )
+                    }
                     drawContext.canvas.nativeCanvas.drawCenteredText(
                         text = graphNode.title.cleanNodeTitle(graphNode.level),
-                        x = graphNode.position.x,
-                        y = graphNode.position.y,
+                        x = center.x,
+                        y = center.y,
                         color = graphNode.textColor.toArgb(),
                         textSize = when (graphNode.level) {
-                            0 -> 38f
-                            1 -> 30f
-                            else -> 24f
+                            0 -> 18f * density.density * scale.coerceIn(0.75f, 1.25f)
+                            1 -> 15.5f * density.density * scale.coerceIn(0.75f, 1.25f)
+                            else -> 14f * density.density * scale.coerceIn(0.75f, 1.25f)
                         },
                         bold = graphNode.level <= 1
                     )
                 }
             }
 
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    "فضای آزاد مایندمپ",
+                    color = onSurfaceVariant,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "لمس نود = انتخاب  •  نگه‌داشتن = منو  •  دو انگشت = زوم",
+                    color = onSurfaceVariant.copy(alpha = 0.82f),
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+
+            if (selectedNodeId != null) {
+                val selected = nodes.firstOrNull { it.id == selectedNodeId }
+                if (selected != null) {
+                    Card(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(12.dp),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+                    ) {
+                        Text(
+                            "انتخاب: ${selected.title.toPersianDigits()}",
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TextButton(onClick = { scale = 1f; pan = Offset.Zero }) { Text("مرکز") }
+                TextButton(onClick = { scale = (scale * 1.15f).coerceAtMost(2.4f) }) { Text("+") }
+                TextButton(onClick = { scale = (scale / 1.15f).coerceAtLeast(0.45f) }) { Text("−") }
+            }
+
             if (nodes.isEmpty()) {
                 Column(
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
+                        .align(Alignment.Center)
                         .padding(18.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("هنوز شاخه‌ای نداری", fontWeight = FontWeight.Bold)
+                    Text("از یک شاخه اصلی شروع کن", fontWeight = FontWeight.Bold)
                     Text(
-                        "روی نود وسط نگه دار یا دکمه «شاخه اصلی» را بزن.",
+                        "مثلاً: طراحی، محتوا، سئو. بعد هرکدام را به زیرشاخه تبدیل کن.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -390,145 +511,274 @@ private fun MindMapCanvasCard(
     }
 }
 
-private fun buildMindGraph(
+@Composable
+private fun MindMapBottomBar(
+    selectedNode: MindMapNode?,
+    modifier: Modifier,
+    onAddRoot: () -> Unit,
+    onAddChild: () -> Unit,
+    onEditSelected: () -> Unit,
+    onDistribute: () -> Unit
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)),
+        elevation = CardDefaults.cardElevation(0.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(
+                onClick = onAddRoot,
+                modifier = Modifier.weight(1f).height(48.dp),
+                shape = RoundedCornerShape(18.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Icon(Icons.Outlined.Add, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("شاخه")
+            }
+            Button(
+                onClick = onAddChild,
+                enabled = selectedNode != null,
+                modifier = Modifier.weight(1f).height(48.dp),
+                shape = RoundedCornerShape(18.dp)
+            ) {
+                Icon(Icons.Outlined.Add, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("زیرشاخه")
+            }
+            OutlinedButton(
+                onClick = onEditSelected,
+                enabled = selectedNode != null,
+                modifier = Modifier.weight(0.85f).height(48.dp),
+                shape = RoundedCornerShape(18.dp)
+            ) { Text("ویرایش") }
+            OutlinedButton(
+                onClick = onDistribute,
+                modifier = Modifier.weight(0.95f).height(48.dp),
+                shape = RoundedCornerShape(18.dp)
+            ) { Text("تسک") }
+        }
+    }
+}
+
+private fun buildXMindGraph(
     projectTitle: String,
     allNodes: List<MindMapNode>,
-    width: Float,
-    height: Float,
+    selectedNodeId: Long?,
     primary: Color,
-    onSurface: Color,
-    onPrimary: Color
+    onPrimary: Color,
+    onSurface: Color
 ): MindGraphLayout {
-    val safeWidth = width.coerceAtLeast(320f)
-    val safeHeight = height.coerceAtLeast(360f)
-    val center = Offset(safeWidth / 2f, safeHeight / 2f)
-    val children = allNodes.filter { it.isActive }.groupBy { it.parentId }
+    val activeNodes = allNodes.filter { it.isActive }
+    val children = activeNodes.groupBy { it.parentId }
     val graphNodes = mutableListOf<GraphNode>()
     val lines = mutableListOf<GraphLine>()
     val palette = listOf(
-        Color(0xFF00D1FF),
-        Color(0xFF22C55E),
+        Color(0xFF00C2FF),
+        Color(0xFFFF4D8D),
+        Color(0xFF7C3AED),
         Color(0xFFFFB020),
-        Color(0xFFFF3D8A),
-        Color(0xFF8B5CF6),
-        Color(0xFF14F195),
+        Color(0xFF22C55E),
         Color(0xFFFF5C35),
-        Color(0xFF2DD4BF),
+        Color(0xFF14B8A6),
         Color(0xFF6366F1),
         Color(0xFFEAB308),
+        Color(0xFFEF4444),
         Color(0xFF06B6D4),
-        Color(0xFFEF4444)
+        Color(0xFFA3E635)
     )
 
     graphNodes += GraphNode(
         node = null,
         title = projectTitle.ifBlank { "پروژه" },
-        position = center,
-        radius = min(safeWidth, safeHeight) * 0.12f,
+        center = Offset.Zero,
+        width = 176f,
+        height = 62f,
         color = primary,
         textColor = onPrimary,
-        level = 0
+        level = 0,
+        side = 1,
+        selected = selectedNodeId == null
     )
 
-    val rootNodes = children[null].orEmpty()
-    val rootCount = max(rootNodes.size, 1)
-    val crowded = rootNodes.size >= 7
-    val rootDistance = min(safeWidth, safeHeight) * if (crowded) 0.34f else 0.31f
-    val rootRadius = if (crowded) 36f else 42f
-    rootNodes.forEachIndexed { index, node ->
-        val angle = (-PI / 2.0) + (2.0 * PI * index / rootCount)
-        val pos = clampOffset(
-            center + Offset((cos(angle) * rootDistance).toFloat(), (sin(angle) * rootDistance).toFloat()),
-            safeWidth,
-            safeHeight,
-            46f
-        )
-        val color = palette[index % palette.size]
-        graphNodes += GraphNode(node, node.title, pos, rootRadius, color, Color.White, level = 1)
-        lines += GraphLine(center, pos, color)
-        addChildGraphNodes(
-            parent = node,
-            parentPosition = pos,
-            parentAngle = angle,
-            level = 2,
-            children = children,
-            width = safeWidth,
-            height = safeHeight,
-            branchColor = color,
-            graphNodes = graphNodes,
-            lines = lines,
-            textColor = onSurface
-        )
-    }
-
+    val roots = children[null].orEmpty()
+    val rightRoots = roots.filterIndexed { index, _ -> index % 2 == 0 }
+    val leftRoots = roots.filterIndexed { index, _ -> index % 2 == 1 }
+    layoutSide(
+        roots = rightRoots,
+        side = 1,
+        startColorIndex = 0,
+        children = children,
+        palette = palette,
+        selectedNodeId = selectedNodeId,
+        graphNodes = graphNodes,
+        lines = lines,
+        onSurface = onSurface
+    )
+    layoutSide(
+        roots = leftRoots,
+        side = -1,
+        startColorIndex = 1,
+        children = children,
+        palette = palette,
+        selectedNodeId = selectedNodeId,
+        graphNodes = graphNodes,
+        lines = lines,
+        onSurface = onSurface
+    )
     return MindGraphLayout(graphNodes, lines)
 }
 
-private fun addChildGraphNodes(
-    parent: MindMapNode,
-    parentPosition: Offset,
-    parentAngle: Double,
-    level: Int,
+private fun layoutSide(
+    roots: List<MindMapNode>,
+    side: Int,
+    startColorIndex: Int,
     children: Map<Long?, List<MindMapNode>>,
-    width: Float,
-    height: Float,
-    branchColor: Color,
+    palette: List<Color>,
+    selectedNodeId: Long?,
     graphNodes: MutableList<GraphNode>,
     lines: MutableList<GraphLine>,
-    textColor: Color
+    onSurface: Color
+) {
+    if (roots.isEmpty()) return
+    val leafSpacing = 86f
+    val rootGap = 26f
+    val totalHeight = roots.sumOf { subtreeLeafCount(it, children).coerceAtLeast(1) } * leafSpacing + (roots.size - 1) * rootGap
+    var cursor = -totalHeight / 2f
+
+    roots.forEachIndexed { index, root ->
+        val leaves = subtreeLeafCount(root, children).coerceAtLeast(1)
+        val blockHeight = leaves * leafSpacing
+        val y = cursor + blockHeight / 2f
+        val color = palette[(startColorIndex + index * 2) % palette.size]
+        val rootPosition = Offset(side * 260f, y)
+        graphNodes += GraphNode(
+            node = root,
+            title = root.title,
+            center = rootPosition,
+            width = nodeWidth(root.title, 1),
+            height = 54f,
+            color = color,
+            textColor = Color.White,
+            level = 1,
+            side = side,
+            selected = selectedNodeId == root.id
+        )
+        lines += GraphLine(Offset.Zero, rootPosition.copy(x = rootPosition.x - side * (nodeWidth(root.title, 1) / 2f)), color, side)
+        layoutChildren(
+            parent = root,
+            parentPosition = rootPosition,
+            parentWidth = nodeWidth(root.title, 1),
+            side = side,
+            level = 2,
+            topY = cursor,
+            children = children,
+            branchColor = color,
+            selectedNodeId = selectedNodeId,
+            graphNodes = graphNodes,
+            lines = lines,
+            onSurface = onSurface
+        )
+        cursor += blockHeight + rootGap
+    }
+}
+
+private fun layoutChildren(
+    parent: MindMapNode,
+    parentPosition: Offset,
+    parentWidth: Float,
+    side: Int,
+    level: Int,
+    topY: Float,
+    children: Map<Long?, List<MindMapNode>>,
+    branchColor: Color,
+    selectedNodeId: Long?,
+    graphNodes: MutableList<GraphNode>,
+    lines: MutableList<GraphLine>,
+    onSurface: Color
 ) {
     val directChildren = children[parent.id].orEmpty()
-    if (directChildren.isEmpty() || level > 4) return
+    if (directChildren.isEmpty()) return
+    val leafSpacing = 86f
+    var cursor = topY
+    directChildren.forEach { child ->
+        val leaves = subtreeLeafCount(child, children).coerceAtLeast(1)
+        val blockHeight = leaves * leafSpacing
+        val y = cursor + blockHeight / 2f
+        val width = nodeWidth(child.title, level)
+        val x = parentPosition.x + side * (250f + max(0, level - 2) * 12f)
+        val pos = Offset(x, y)
+        val color = branchColor.copy(alpha = when (level) { 2 -> 0.92f; 3 -> 0.78f; else -> 0.66f })
+        val textColor = if (level == 2) Color.White else onSurface
+        graphNodes += GraphNode(
+            node = child,
+            title = child.title,
+            center = pos,
+            width = width,
+            height = if (level == 2) 48f else 44f,
+            color = color,
+            textColor = textColor,
+            level = level,
+            side = side,
+            selected = selectedNodeId == child.id
+        )
+        lines += GraphLine(
+            from = parentPosition.copy(x = parentPosition.x + side * (parentWidth / 2f)),
+            to = pos.copy(x = pos.x - side * (width / 2f)),
+            color = branchColor,
+            side = side
+        )
+        layoutChildren(child, pos, width, side, level + 1, cursor, children, branchColor, selectedNodeId, graphNodes, lines, onSurface)
+        cursor += blockHeight
+    }
+}
 
-    val spread = if (directChildren.size == 1) 0.0 else PI / (1.8 + level)
-    val start = parentAngle - spread / 2.0
-    val step = if (directChildren.size == 1) 0.0 else spread / (directChildren.size - 1)
-    val distance = when (level) {
-        2 -> 105f
-        3 -> 82f
-        else -> 68f
-    }
-    val radius = when (level) {
-        2 -> 31f
-        3 -> 25f
-        else -> 21f
-    }
+private fun subtreeLeafCount(node: MindMapNode, children: Map<Long?, List<MindMapNode>>): Int {
+    val list = children[node.id].orEmpty()
+    return if (list.isEmpty()) 1 else list.sumOf { subtreeLeafCount(it, children) }
+}
 
-    directChildren.forEachIndexed { index, child ->
-        val angle = start + step * index
-        val raw = parentPosition + Offset((cos(angle) * distance).toFloat(), (sin(angle) * distance).toFloat())
-        val pos = clampOffset(raw, width, height, radius + 10f)
-        val color = when (level) {
-            2 -> branchColor.copy(alpha = 0.94f)
-            3 -> branchColor.copy(alpha = 0.78f)
-            else -> branchColor.copy(alpha = 0.62f)
-        }
-        val childTextColor = Color.White
-        graphNodes += GraphNode(child, child.title, pos, radius, color, childTextColor, level)
-        lines += GraphLine(parentPosition, pos, branchColor)
-        addChildGraphNodes(child, pos, angle, level + 1, children, width, height, branchColor, graphNodes, lines, textColor)
+private fun nodeWidth(title: String, level: Int): Float {
+    val base = when (level) {
+        1 -> 148f
+        2 -> 136f
+        else -> 126f
     }
+    return (base + min(title.trim().length, 12) * 5f).coerceAtMost(if (level == 1) 190f else 176f)
+}
+
+private fun GraphNode.hit(point: Offset): Boolean {
+    return point.x >= center.x - width / 2f - 12f &&
+        point.x <= center.x + width / 2f + 12f &&
+        point.y >= center.y - height / 2f - 12f &&
+        point.y <= center.y + height / 2f + 12f
+}
+
+private fun worldToScreen(world: Offset, origin: Offset, scale: Float): Offset {
+    return Offset(origin.x + world.x * scale, origin.y + world.y * scale)
+}
+
+private fun screenToWorld(screen: Offset, origin: Offset, scale: Float): Offset {
+    return Offset((screen.x - origin.x) / scale, (screen.y - origin.y) / scale)
 }
 
 private operator fun Offset.plus(other: Offset): Offset = Offset(x + other.x, y + other.y)
-
-private fun Offset.distanceTo(other: Offset): Float {
-    return sqrt((x - other.x).pow(2) + (y - other.y).pow(2))
-}
-
-private fun clampOffset(offset: Offset, width: Float, height: Float, margin: Float): Offset {
-    return Offset(
-        x = offset.x.coerceIn(margin, width - margin),
-        y = offset.y.coerceIn(margin, height - margin)
-    )
-}
+private operator fun Offset.minus(other: Offset): Offset = Offset(x - other.x, y - other.y)
 
 private fun String.cleanNodeTitle(level: Int): String {
     val maxChars = when (level) {
-        0 -> 18
-        1 -> 14
-        2 -> 12
-        else -> 10
+        0 -> 16
+        1 -> 15
+        2 -> 14
+        else -> 13
     }
     return trim().toPersianDigits().let { if (it.length > maxChars) it.take(maxChars - 1) + "…" else it }
 }
@@ -579,8 +829,8 @@ private fun MindMapActionSheet(
                 .padding(horizontal = 18.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            Text(title.toPersianDigits(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(subtitle.toPersianDigits(), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(8.dp))
             actions.forEachIndexed { index, action ->
                 MindActionRow(action.title, action.icon, action.danger, action.onClick)
@@ -644,7 +894,7 @@ private fun NodeEditorDialog(
     var desc by remember { mutableStateOf(state.editNode?.description.orEmpty()) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (state.editNode == null) "نود جدید" else "ویرایش نود") },
+        title = { Text(if (state.editNode == null) if (state.parentId == null) "شاخه اصلی جدید" else "زیرشاخه جدید" else "ویرایش نود") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
