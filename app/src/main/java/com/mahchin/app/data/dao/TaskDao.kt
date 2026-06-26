@@ -7,14 +7,54 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.mahchin.app.data.model.DailyTaskInstance
+import com.mahchin.app.data.model.MindMapNode
 import com.mahchin.app.data.model.MonthlyTemplateTask
 import com.mahchin.app.data.model.OneTimeTask
-import com.mahchin.app.data.model.TaskStatus
+import com.mahchin.app.data.model.Project
 import com.mahchin.app.data.model.UserSettings
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TaskDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertProject(project: Project): Long
+
+    @Update
+    suspend fun updateProject(project: Project)
+
+    @Query("SELECT * FROM projects WHERE isActive = 1 ORDER BY createdAt ASC")
+    fun observeProjects(): Flow<List<Project>>
+
+    @Query("SELECT * FROM projects WHERE isActive = 1 ORDER BY createdAt ASC")
+    suspend fun getProjects(): List<Project>
+
+    @Query("SELECT * FROM projects WHERE id = :id LIMIT 1")
+    suspend fun getProject(id: Long): Project?
+
+    @Query("SELECT COUNT(*) FROM projects WHERE isActive = 1")
+    suspend fun activeProjectCount(): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMindMapNode(node: MindMapNode): Long
+
+    @Update
+    suspend fun updateMindMapNode(node: MindMapNode)
+
+    @Query("SELECT * FROM mind_map_nodes WHERE isActive = 1 AND projectId = :projectId ORDER BY parentId ASC, orderIndex ASC, createdAt ASC")
+    fun observeMindMapNodes(projectId: Long): Flow<List<MindMapNode>>
+
+    @Query("SELECT * FROM mind_map_nodes WHERE isActive = 1 AND projectId = :projectId ORDER BY parentId ASC, orderIndex ASC, createdAt ASC")
+    suspend fun getMindMapNodes(projectId: Long): List<MindMapNode>
+
+    @Query("SELECT * FROM mind_map_nodes WHERE isActive = 1 ORDER BY projectId ASC, parentId ASC, orderIndex ASC, createdAt ASC")
+    fun observeAllMindMapNodes(): Flow<List<MindMapNode>>
+
+    @Query("SELECT * FROM mind_map_nodes WHERE isActive = 1 ORDER BY projectId ASC, parentId ASC, orderIndex ASC, createdAt ASC")
+    suspend fun getAllMindMapNodes(): List<MindMapNode>
+
+    @Query("SELECT * FROM mind_map_nodes WHERE id = :id LIMIT 1")
+    suspend fun getMindMapNode(id: Long): MindMapNode?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTemplate(task: MonthlyTemplateTask): Long
 
@@ -54,6 +94,9 @@ interface TaskDao {
     @Query("SELECT * FROM daily_task_instances WHERE sourceTemplateId = :sourceTemplateId AND jalaliYear = :year AND jalaliMonth = :month AND jalaliDay = :day LIMIT 1")
     suspend fun getDailyInstanceBySource(sourceTemplateId: Long, year: Int, month: Int, day: Int): DailyTaskInstance?
 
+    @Query("SELECT * FROM daily_task_instances WHERE alarmAtMillis IS NOT NULL AND alarmAtMillis >= :now")
+    suspend fun getFutureDailyTasksWithAlarms(now: Long): List<DailyTaskInstance>
+
     @Query("SELECT * FROM daily_task_instances WHERE jalaliYear = :year AND jalaliMonth = :month ORDER BY jalaliDay ASC")
     fun observeDailyInstancesForMonth(year: Int, month: Int): Flow<List<DailyTaskInstance>>
 
@@ -77,6 +120,9 @@ interface TaskDao {
 
     @Query("SELECT * FROM one_time_tasks WHERE id = :id LIMIT 1")
     suspend fun getOneTimeTask(id: Long): OneTimeTask?
+
+    @Query("SELECT * FROM one_time_tasks WHERE alarmAtMillis IS NOT NULL AND alarmAtMillis >= :now")
+    suspend fun getFutureOneTimeTasksWithAlarms(now: Long): List<OneTimeTask>
 
     @Query("SELECT * FROM one_time_tasks WHERE jalaliYear = :year AND jalaliMonth = :month ORDER BY jalaliDay ASC")
     fun observeOneTimeTasksForMonth(year: Int, month: Int): Flow<List<OneTimeTask>>

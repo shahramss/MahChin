@@ -5,8 +5,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.mahchin.app.data.model.MindMapNode
 import com.mahchin.app.data.model.MonthlyTemplateTask
-import com.mahchin.app.data.model.ReminderIntensity
+import com.mahchin.app.data.model.Project
 import com.mahchin.app.data.model.TaskItem
 import com.mahchin.app.data.model.TaskPriority
 import com.mahchin.app.data.model.TaskStatus
@@ -17,6 +18,7 @@ import com.mahchin.app.domain.JalaliCalendar
 import com.mahchin.app.domain.JalaliDate
 import com.mahchin.app.notification.NotificationHelper
 import com.mahchin.app.notification.ReminderScheduler
+import com.mahchin.app.notification.TaskAlarmScheduler
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,6 +44,9 @@ class MainViewModel(
     private val _settingsMessage = MutableStateFlow<String?>(null)
     val settingsMessage: StateFlow<String?> = _settingsMessage
 
+    private val _selectedProjectId = MutableStateFlow<Long?>(null)
+    val selectedProjectId: StateFlow<Long?> = _selectedProjectId
+
     val settings: StateFlow<UserSettings> = repository.settingsFlow.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
@@ -53,6 +58,17 @@ class MainViewModel(
         SharingStarted.WhileSubscribed(5_000),
         emptyList()
     )
+
+    val projects: StateFlow<List<Project>> = repository.projectsFlow.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList()
+    )
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val mindMapNodes: StateFlow<List<MindMapNode>> = selectedProjectId.flatMapLatest { id ->
+        if (id == null) kotlinx.coroutines.flow.flowOf(emptyList()) else repository.observeMindMapNodes(id)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val todayTasks: StateFlow<List<TaskItem>> = MutableStateFlow(today).flatMapLatest {
@@ -77,15 +93,54 @@ class MainViewModel(
     init {
         viewModelScope.launch {
             repository.ensureDefaultSettings()
+            val firstProject = repository.ensureDefaultProject()
+            if (_selectedProjectId.value == null) _selectedProjectId.value = firstProject
             repository.ensureTasksForDate(today)
             repository.ensureTasksForMonth(today.year, today.month)
             ReminderScheduler.schedulePeriodic(app, repository.getSettingsOrDefault())
+            rescheduleTaskAlarms()
         }
     }
 
     fun selectDate(date: JalaliDate) {
         _selectedDate.value = date
         viewModelScope.launch { repository.ensureTasksForDate(date) }
+    }
+
+    fun selectProject(projectId: Long) {
+        _selectedProjectId.value = projectId
+    }
+
+    fun addProject(name: String) {
+        viewModelScope.launch {
+            val id = repository.addProject(name)
+            _selectedProjectId.value = id
+        }
+    }
+
+    fun addMindMapNode(parentId: Long?, title: String, description: String = "") {
+        val projectId = _selectedProjectId.value ?: return
+        if (title.isBlank()) return
+        viewModelScope.launch { repository.addMindMapNode(projectId, parentId, title, description) }
+    }
+
+    fun updateMindMapNode(id: Long, title: String, description: String = "") {
+        if (title.isBlank()) return
+        viewModelScope.launch { repository.updateMindMapNode(id, title, description) }
+    }
+
+    fun deleteMindMapNode(id: Long) {
+        viewModelScope.launch { repository.deleteMindMapNode(id) }
+    }
+
+    fun makeTasksFromMindMap(startDate: JalaliDate, tasksPerDay: Int) {
+        val projectId = _selectedProjectId.value ?: return
+        viewModelScope.launch {
+            val count = repository.createTasksFromMindMap(projectId, startDate, tasksPerDay)
+            repository.ensureTasksForMonth(startDate.year, startDate.month)
+            _settingsMessage.value = "${count} تسک از مایندمپ ساخته شد."
+            ReminderScheduler.scheduleImmediateCheck(app)
+        }
     }
 
     fun nextMonth() {
@@ -100,28 +155,41 @@ class MainViewModel(
         viewModelScope.launch { repository.ensureTasksForMonth(prev.year, prev.month) }
     }
 
-    fun addTodayTask(title: String, description: String, priority: TaskPriority) = addOneTimeTask(today, title, description, priority)
+    fun addTodayTask(title: String, description: String, priority: TaskPriority, projectId: Long? = null) = addOneTimeTask(today, title, description, priority, projectId)
 
-    fun addOneTimeTask(date: JalaliDate, title: String, description: String, priority: TaskPriority) {
+    fun addOneTimeTask(date: JalaliDate, title: String, description: String, priority: TaskPriority, projectId: Long? = null) {
         if (title.isBlank()) return
         viewModelScope.launch {
-            repository.addOneTimeTask(date, title, description, priority)
+            repository.addOneTimeTask(date, title, description, priority, projectId = projectId ?: _selectedProjectId.value)
             ReminderScheduler.scheduleImmediateCheck(app)
+            rescheduleTaskAlarms()
         }
     }
 
-    fun addTemplateTask(title: String, description: String, dayOfMonth: Int, priority: TaskPriority) {
+    fun addTemplateTask(title: String, description: String, dayOfMonth: Int, priority: TaskPriority, projectId: Long? = null) {
         if (title.isBlank()) return
         viewModelScope.launch {
-            repository.addTemplateTask(title, description, dayOfMonth, priority)
+            repository.addTemplateTask(title, description, dayOfMonth, priority, projectId = projectId ?: _selectedProjectId.value)
             repository.ensureTasksForDate(today)
             ReminderScheduler.scheduleImmediateCheck(app)
+            rescheduleTaskAlarms()
         }
     }
 
-    fun updateTemplate(id: Long, title: String, description: String, dayOfMonth: Int, priority: TaskPriority) {
+    fun updateTemplate(id: Long, title: String, description: String, dayOfMonth: Int, priority: TaskPriority, projectId: Long? = null) {
         if (title.isBlank()) return
-        viewModelScope.launch { repository.updateTemplateTask(id, title, description, dayOfMonth, priority) }
+        viewModelScope.launch {
+            repository.updateTemplateTask(id, title, description, dayOfMonth, priority, projectId)
+            rescheduleTaskAlarms()
+        }
+    }
+
+    fun setTemplateAlarm(templateId: Long, hour: Int?, minute: Int?) {
+        viewModelScope.launch {
+            repository.setTemplateAlarm(templateId, hour, minute)
+            repository.ensureTasksForMonth(today.year, today.month)
+            rescheduleTaskAlarms()
+        }
     }
 
     fun deleteTemplate(id: Long) {
@@ -145,20 +213,40 @@ class MainViewModel(
     fun setStatus(item: TaskItem, status: TaskStatus) {
         viewModelScope.launch {
             repository.setStatus(item, status)
+            if (status.isClosed()) TaskAlarmScheduler.cancel(app, item)
             ReminderScheduler.scheduleImmediateCheck(app)
         }
     }
 
-    fun editOnlyThisDate(item: TaskItem, title: String, description: String, priority: TaskPriority) {
+    fun setTaskAlarm(item: TaskItem, date: JalaliDate, hour: Int, minute: Int) {
+        viewModelScope.launch {
+            val millis = repository.toEpochMillis(date, hour, minute)
+            repository.setTaskAlarm(item, millis)
+            rescheduleTaskAlarms()
+            _settingsMessage.value = "آلارم تسک تنظیم شد."
+        }
+    }
+
+    fun clearTaskAlarm(item: TaskItem) {
+        viewModelScope.launch {
+            TaskAlarmScheduler.cancel(app, item)
+            repository.setTaskAlarm(item, null)
+            _settingsMessage.value = "آلارم تسک حذف شد."
+        }
+    }
+
+    fun editOnlyThisDate(item: TaskItem, title: String, description: String, priority: TaskPriority, projectId: Long? = null) {
         if (title.isBlank()) return
         viewModelScope.launch {
-            repository.editTaskOnlyThisDate(item, title, description, priority)
+            repository.editTaskOnlyThisDate(item, title, description, priority, projectId)
             ReminderScheduler.scheduleImmediateCheck(app)
+            rescheduleTaskAlarms()
         }
     }
 
     fun deleteTask(item: TaskItem) {
         viewModelScope.launch {
+            TaskAlarmScheduler.cancel(app, item)
             repository.deleteTask(item)
             ReminderScheduler.scheduleImmediateCheck(app)
         }
@@ -211,6 +299,10 @@ class MainViewModel(
             repository.updateSettings(newSettings)
             ReminderScheduler.schedulePeriodic(app, newSettings)
         }
+    }
+
+    private suspend fun rescheduleTaskAlarms() {
+        TaskAlarmScheduler.rescheduleAll(app, repository.getFutureAlarms())
     }
 }
 

@@ -39,6 +39,7 @@ import com.mahchin.app.domain.JalaliCalendar
 import com.mahchin.app.domain.JalaliDate
 import com.mahchin.app.domain.toPersianDigits
 import com.mahchin.app.ui.components.JalaliDateDialog
+import com.mahchin.app.ui.components.TaskAlarmDialog
 import com.mahchin.app.ui.components.TaskCard
 import com.mahchin.app.ui.components.TaskEditorDialog
 import com.mahchin.app.ui.viewmodel.MainViewModel
@@ -49,10 +50,12 @@ fun CalendarScreen(vm: MainViewModel) {
     val counts by vm.monthCounts.collectAsState()
     val selectedDate by vm.selectedDate.collectAsState()
     val selectedTasks by vm.selectedDateTasks.collectAsState()
+    val projects by vm.projects.collectAsState()
 
     var addDialog by remember { mutableStateOf(false) }
     var editTask by remember { mutableStateOf<TaskItem?>(null) }
     var moveTask by remember { mutableStateOf<TaskItem?>(null) }
+    var alarmTask by remember { mutableStateOf<TaskItem?>(null) }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -87,7 +90,8 @@ fun CalendarScreen(vm: MainViewModel) {
                     onMoveCustom = { moveTask = task },
                     onCancel = { vm.cancelToday(task) },
                     onInProgress = { vm.inProgress(task) },
-                    onReset = { vm.resetStatus(task) }
+                    onReset = { vm.resetStatus(task) },
+                    onSetAlarm = { alarmTask = task }
                 )
             }
         }
@@ -96,9 +100,10 @@ fun CalendarScreen(vm: MainViewModel) {
     if (addDialog) {
         TaskEditorDialog(
             titleText = "تسک اختصاصی برای ${selectedDate.display}",
+            projects = projects,
             onDismiss = { addDialog = false },
-            onSave = { title, desc, _, priority ->
-                vm.addOneTimeTask(selectedDate, title, desc, priority)
+            onSave = { title, desc, _, priority, projectId ->
+                vm.addOneTimeTask(selectedDate, title, desc, priority, projectId)
                 addDialog = false
             }
         )
@@ -110,9 +115,11 @@ fun CalendarScreen(vm: MainViewModel) {
             initialTitle = task.title,
             initialDescription = task.description,
             initialPriority = task.priority,
+            initialProjectId = task.projectId,
+            projects = projects,
             onDismiss = { editTask = null },
-            onSave = { title, desc, _, priority ->
-                vm.editOnlyThisDate(task, title, desc, priority)
+            onSave = { title, desc, _, priority, projectId ->
+                vm.editOnlyThisDate(task, title, desc, priority, projectId)
                 editTask = null
             }
         )
@@ -123,6 +130,15 @@ fun CalendarScreen(vm: MainViewModel) {
             initialDate = selectedDate.plusDays(1),
             onDismiss = { moveTask = null },
             onSave = { date -> vm.moveToCustomDate(task, date); moveTask = null }
+        )
+    }
+
+    alarmTask?.let { task ->
+        TaskAlarmDialog(
+            initialDate = JalaliDate(task.jalaliYear, task.jalaliMonth, task.jalaliDay),
+            onDismiss = { alarmTask = null },
+            onClear = { vm.clearTaskAlarm(task); alarmTask = null },
+            onSave = { date, hour, minute -> vm.setTaskAlarm(task, date, hour, minute); alarmTask = null }
         )
     }
 }

@@ -2,16 +2,18 @@ package com.mahchin.app.data.repository
 
 import com.mahchin.app.data.dao.TaskDao
 import com.mahchin.app.data.model.DailyTaskInstance
+import com.mahchin.app.data.model.MindMapNode
 import com.mahchin.app.data.model.MonthlyTemplateTask
 import com.mahchin.app.data.model.OneTimeTask
+import com.mahchin.app.data.model.Project
 import com.mahchin.app.data.model.TaskItem
 import com.mahchin.app.data.model.TaskOrigin
 import com.mahchin.app.data.model.TaskPriority
 import com.mahchin.app.data.model.TaskStatus
-import com.mahchin.app.data.model.TaskType
 import com.mahchin.app.data.model.UserSettings
 import com.mahchin.app.domain.JalaliCalendar
 import com.mahchin.app.domain.JalaliDate
+import java.time.ZoneId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -22,6 +24,7 @@ class TaskRepository(private val dao: TaskDao) {
 
     val settingsFlow: Flow<UserSettings> = dao.observeSettings().map { it ?: UserSettings() }
     val templatesFlow: Flow<List<MonthlyTemplateTask>> = dao.observeTemplates()
+    val projectsFlow: Flow<List<Project>> = dao.observeProjects()
 
     suspend fun getSettingsOrDefault(): UserSettings = withContext(Dispatchers.IO) {
         dao.getSettings() ?: UserSettings().also { dao.upsertSettings(it) }
@@ -29,27 +32,82 @@ class TaskRepository(private val dao: TaskDao) {
 
     suspend fun ensureDefaultSettings() = withContext(Dispatchers.IO) {
         if (dao.getSettings() == null) dao.upsertSettings(UserSettings())
+        ensureDefaultProject()
+    }
+
+    suspend fun ensureDefaultProject(): Long = withContext(Dispatchers.IO) {
+        val existing = dao.getProjects().firstOrNull()
+        existing?.id ?: dao.insertProject(Project(name = "عمومی"))
     }
 
     suspend fun updateSettings(settings: UserSettings) = withContext(Dispatchers.IO) {
         dao.upsertSettings(settings.copy(updatedAt = System.currentTimeMillis()))
     }
 
-    suspend fun addTemplateTask(title: String, description: String, dayOfMonth: Int, priority: TaskPriority) = withContext(Dispatchers.IO) {
-        dao.insertTemplate(
-            MonthlyTemplateTask(
-                title = title.trim(),
-                description = description.trim(),
-                dayOfMonth = dayOfMonth.coerceIn(1, 31),
-                priority = priority
+    suspend fun addProject(name: String): Long = withContext(Dispatchers.IO) {
+        val clean = name.trim().ifBlank { "پروژه جدید" }
+        dao.insertProject(Project(name = clean))
+    }
+
+    fun observeMindMapNodes(projectId: Long): Flow<List<MindMapNode>> = dao.observeMindMapNodes(projectId)
+
+    suspend fun addMindMapNode(projectId: Long, parentId: Long?, title: String, description: String = ""): Long = withContext(Dispatchers.IO) {
+        dao.insertMindMapNode(
+            MindMapNode(
+                projectId = projectId,
+                parentId = parentId,
+                title = title.trim().ifBlank { "گره جدید" },
+                description = description.trim()
             )
         )
     }
 
-    suspend fun updateTemplateTask(id: Long, title: String, description: String, dayOfMonth: Int, priority: TaskPriority) = withContext(Dispatchers.IO) {
+    suspend fun updateMindMapNode(id: Long, title: String, description: String = "") = withContext(Dispatchers.IO) {
+        dao.getMindMapNode(id)?.let {
+            dao.updateMindMapNode(it.copy(title = title.trim(), description = description.trim(), updatedAt = System.currentTimeMillis()))
+        }
+    }
+
+    suspend fun deleteMindMapNode(id: Long) = withContext(Dispatchers.IO) {
+        dao.getMindMapNode(id)?.let { dao.updateMindMapNode(it.copy(isActive = false, updatedAt = System.currentTimeMillis())) }
+    }
+
+    suspend fun addTemplateTask(
+        title: String,
+        description: String,
+        dayOfMonth: Int,
+        priority: TaskPriority,
+        projectId: Long? = null,
+        sourceMindMapNodeId: Long? = null,
+        alarmHour: Int? = null,
+        alarmMinute: Int? = null
+    ) = withContext(Dispatchers.IO) {
+        dao.insertTemplate(
+            MonthlyTemplateTask(
+                projectId = projectId,
+                sourceMindMapNodeId = sourceMindMapNodeId,
+                title = title.trim(),
+                description = description.trim(),
+                dayOfMonth = dayOfMonth.coerceIn(1, 31),
+                priority = priority,
+                alarmHour = alarmHour,
+                alarmMinute = alarmMinute
+            )
+        )
+    }
+
+    suspend fun updateTemplateTask(
+        id: Long,
+        title: String,
+        description: String,
+        dayOfMonth: Int,
+        priority: TaskPriority,
+        projectId: Long? = null
+    ) = withContext(Dispatchers.IO) {
         dao.getTemplate(id)?.let {
             dao.updateTemplate(
                 it.copy(
+                    projectId = projectId ?: it.projectId,
                     title = title.trim(),
                     description = description.trim(),
                     dayOfMonth = dayOfMonth.coerceIn(1, 31),
@@ -60,26 +118,41 @@ class TaskRepository(private val dao: TaskDao) {
         }
     }
 
+    suspend fun setTemplateAlarm(id: Long, hour: Int?, minute: Int?) = withContext(Dispatchers.IO) {
+        dao.getTemplate(id)?.let {
+            dao.updateTemplate(it.copy(alarmHour = hour, alarmMinute = minute, updatedAt = System.currentTimeMillis()))
+        }
+    }
+
     suspend fun deleteTemplateTask(id: Long) = withContext(Dispatchers.IO) {
         dao.getTemplate(id)?.let { dao.updateTemplate(it.copy(isActive = false, updatedAt = System.currentTimeMillis())) }
     }
 
     suspend fun setTemplateStatus(id: Long, status: TaskStatus) = withContext(Dispatchers.IO) {
-        dao.getTemplate(id)?.let {
-            dao.updateTemplate(it.copy(status = status, updatedAt = System.currentTimeMillis()))
-        }
+        dao.getTemplate(id)?.let { dao.updateTemplate(it.copy(status = status, updatedAt = System.currentTimeMillis())) }
     }
 
-    suspend fun addOneTimeTask(date: JalaliDate, title: String, description: String, priority: TaskPriority) = withContext(Dispatchers.IO) {
+    suspend fun addOneTimeTask(
+        date: JalaliDate,
+        title: String,
+        description: String,
+        priority: TaskPriority,
+        projectId: Long? = null,
+        sourceMindMapNodeId: Long? = null,
+        alarmAtMillis: Long? = null
+    ) = withContext(Dispatchers.IO) {
         dao.insertOneTimeTask(
             OneTimeTask(
+                projectId = projectId,
+                sourceMindMapNodeId = sourceMindMapNodeId,
                 title = title.trim(),
                 description = description.trim(),
                 dayOfMonth = date.day,
                 jalaliYear = date.year,
                 jalaliMonth = date.month,
                 jalaliDay = date.day,
-                priority = priority
+                priority = priority,
+                alarmAtMillis = alarmAtMillis
             )
         )
     }
@@ -90,19 +163,28 @@ class TaskRepository(private val dao: TaskDao) {
         templates
             .filter { JalaliCalendar.normalizeDayForMonth(it.dayOfMonth, date.year, date.month) == date.day }
             .forEach { template ->
-                if (dao.getDailyInstanceBySource(template.id, date.year, date.month, date.day) == null) {
+                val alarmMillis = if (template.alarmHour != null && template.alarmMinute != null) {
+                    toEpochMillis(date, template.alarmHour, template.alarmMinute)
+                } else null
+                val existing = dao.getDailyInstanceBySource(template.id, date.year, date.month, date.day)
+                if (existing == null) {
                     dao.insertDailyInstance(
                         DailyTaskInstance(
                             sourceTemplateId = template.id,
+                            projectId = template.projectId,
+                            sourceMindMapNodeId = template.sourceMindMapNodeId,
                             title = template.title,
                             description = template.description,
                             dayOfMonth = template.dayOfMonth.coerceAtMost(monthLength),
                             jalaliYear = date.year,
                             jalaliMonth = date.month,
                             jalaliDay = date.day,
-                            priority = template.priority
+                            priority = template.priority,
+                            alarmAtMillis = alarmMillis
                         )
                     )
+                } else if (existing.alarmAtMillis != alarmMillis || existing.projectId != template.projectId) {
+                    dao.updateDailyInstance(existing.copy(projectId = template.projectId, alarmAtMillis = alarmMillis, updatedAt = System.currentTimeMillis()))
                 }
             }
     }
@@ -115,17 +197,23 @@ class TaskRepository(private val dao: TaskDao) {
     fun observeTasksForDate(date: JalaliDate): Flow<List<TaskItem>> {
         return combine(
             dao.observeDailyInstances(date.year, date.month, date.day),
-            dao.observeOneTimeTasks(date.year, date.month, date.day)
-        ) { daily, oneTime ->
-            (daily.map { it.toItem() } + oneTime.map { it.toItem() })
+            dao.observeOneTimeTasks(date.year, date.month, date.day),
+            dao.observeProjects(),
+            dao.observeAllMindMapNodes()
+        ) { daily, oneTime, projects, nodes ->
+            val projectMap = projects.associateBy { it.id }
+            val nodeMap = nodes.associateBy { it.id }
+            (daily.map { it.toItem(projectMap, nodeMap) } + oneTime.map { it.toItem(projectMap, nodeMap) })
                 .sortedWith(compareByDescending<TaskItem> { it.priority.weight }.thenBy { it.createdAt })
         }
     }
 
     suspend fun getTasksForDate(date: JalaliDate): List<TaskItem> = withContext(Dispatchers.IO) {
         ensureTasksForDate(date)
-        (dao.getDailyInstances(date.year, date.month, date.day).map { it.toItem() } +
-            dao.getOneTimeTasks(date.year, date.month, date.day).map { it.toItem() })
+        val projects = dao.getProjects().associateBy { it.id }
+        val nodes = dao.getAllMindMapNodes().associateBy { it.id }
+        (dao.getDailyInstances(date.year, date.month, date.day).map { it.toItem(projects, nodes) } +
+            dao.getOneTimeTasks(date.year, date.month, date.day).map { it.toItem(projects, nodes) })
             .sortedWith(compareByDescending<TaskItem> { it.priority.weight }.thenBy { it.createdAt })
     }
 
@@ -168,6 +256,14 @@ class TaskRepository(private val dao: TaskDao) {
         }
     }
 
+    suspend fun setTaskAlarm(item: TaskItem, alarmAtMillis: Long?) = withContext(Dispatchers.IO) {
+        when (item.origin) {
+            TaskOrigin.DAILY_INSTANCE -> dao.getDailyInstance(item.id)?.let { dao.updateDailyInstance(it.copy(alarmAtMillis = alarmAtMillis, updatedAt = System.currentTimeMillis())) }
+            TaskOrigin.ONE_TIME -> dao.getOneTimeTask(item.id)?.let { dao.updateOneTimeTask(it.copy(alarmAtMillis = alarmAtMillis, updatedAt = System.currentTimeMillis())) }
+            TaskOrigin.TEMPLATE -> Unit
+        }
+    }
+
     suspend fun deleteTask(item: TaskItem) = withContext(Dispatchers.IO) {
         when (item.origin) {
             TaskOrigin.DAILY_INSTANCE -> dao.getDailyInstance(item.id)?.let { dao.deleteDailyInstance(it) }
@@ -176,13 +272,19 @@ class TaskRepository(private val dao: TaskDao) {
         }
     }
 
-    suspend fun editTaskOnlyThisDate(item: TaskItem, title: String, description: String, priority: TaskPriority) = withContext(Dispatchers.IO) {
+    suspend fun editTaskOnlyThisDate(
+        item: TaskItem,
+        title: String,
+        description: String,
+        priority: TaskPriority,
+        projectId: Long? = null
+    ) = withContext(Dispatchers.IO) {
         when (item.origin) {
             TaskOrigin.DAILY_INSTANCE -> dao.getDailyInstance(item.id)?.let {
-                dao.updateDailyInstance(it.copy(title = title.trim(), description = description.trim(), priority = priority, updatedAt = System.currentTimeMillis()))
+                dao.updateDailyInstance(it.copy(title = title.trim(), description = description.trim(), priority = priority, projectId = projectId ?: it.projectId, updatedAt = System.currentTimeMillis()))
             }
             TaskOrigin.ONE_TIME -> dao.getOneTimeTask(item.id)?.let {
-                dao.updateOneTimeTask(it.copy(title = title.trim(), description = description.trim(), priority = priority, updatedAt = System.currentTimeMillis()))
+                dao.updateOneTimeTask(it.copy(title = title.trim(), description = description.trim(), priority = priority, projectId = projectId ?: it.projectId, updatedAt = System.currentTimeMillis()))
             }
             TaskOrigin.TEMPLATE -> Unit
         }
@@ -193,6 +295,8 @@ class TaskRepository(private val dao: TaskDao) {
         val fromDate = item.dateKey
         val targetKey = targetDate.key
         val movedCopy = OneTimeTask(
+            projectId = item.projectId,
+            sourceMindMapNodeId = item.sourceMindMapNodeId,
             title = item.title,
             description = item.description,
             dayOfMonth = targetDate.day,
@@ -206,35 +310,73 @@ class TaskRepository(private val dao: TaskDao) {
         )
         dao.insertOneTimeTask(movedCopy)
         when (item.origin) {
-            TaskOrigin.DAILY_INSTANCE -> dao.getDailyInstance(item.id)?.let {
-                dao.updateDailyInstance(it.copy(status = movedStatus, movedToDate = targetKey, updatedAt = now))
-            }
-            TaskOrigin.ONE_TIME -> dao.getOneTimeTask(item.id)?.let {
-                dao.updateOneTimeTask(it.copy(status = movedStatus, movedToDate = targetKey, updatedAt = now))
-            }
+            TaskOrigin.DAILY_INSTANCE -> dao.getDailyInstance(item.id)?.let { dao.updateDailyInstance(it.copy(status = movedStatus, movedToDate = targetKey, updatedAt = now)) }
+            TaskOrigin.ONE_TIME -> dao.getOneTimeTask(item.id)?.let { dao.updateOneTimeTask(it.copy(status = movedStatus, movedToDate = targetKey, updatedAt = now)) }
             TaskOrigin.TEMPLATE -> Unit
         }
     }
 
     suspend fun moveTaskToTomorrow(item: TaskItem) {
-        val today = JalaliDate(item.jalaliYear, item.jalaliMonth, item.jalaliDay)
-        moveTaskToDate(item, today.plusDays(1), TaskStatus.MOVED_TO_TOMORROW)
+        val date = JalaliDate(item.jalaliYear, item.jalaliMonth, item.jalaliDay).plusDays(1)
+        moveTaskToDate(item, date, TaskStatus.MOVED_TO_TOMORROW)
     }
 
     suspend fun moveRemainingToTomorrow(date: JalaliDate) = withContext(Dispatchers.IO) {
-        val items = getTasksForDate(date).filter { it.status == TaskStatus.NOT_STARTED || it.status == TaskStatus.IN_PROGRESS }
-        val tomorrow = date.plusDays(1)
-        items.forEach { moveTaskToDate(it, tomorrow, TaskStatus.MOVED_TO_TOMORROW) }
+        getTasksForDate(date).filter { !it.status.isClosed() }.forEach { moveTaskToTomorrow(it) }
     }
 
-    suspend fun remainingCount(date: JalaliDate): Int = withContext(Dispatchers.IO) {
-        getTasksForDate(date).count { it.status == TaskStatus.NOT_STARTED || it.status == TaskStatus.IN_PROGRESS }
+    suspend fun createTasksFromMindMap(projectId: Long, startDate: JalaliDate, tasksPerDay: Int): Int = withContext(Dispatchers.IO) {
+        val nodes = dao.getMindMapNodes(projectId)
+        if (nodes.isEmpty()) return@withContext 0
+        val childParentIds = nodes.mapNotNull { it.parentId }.toSet()
+        val leaves = nodes.filter { it.id !in childParentIds && it.parentId != null }.ifEmpty { nodes }
+        val projectName = dao.getProject(projectId)?.name ?: "پروژه"
+        val perDay = tasksPerDay.coerceIn(1, 20)
+        leaves.forEachIndexed { index, node ->
+            val date = startDate.plusDays((index / perDay).toLong())
+            val path = buildMindMapPath(node.id, nodes.associateBy { it.id })
+            dao.insertOneTimeTask(
+                OneTimeTask(
+                    projectId = projectId,
+                    sourceMindMapNodeId = node.id,
+                    title = node.title,
+                    description = "پروژه: $projectName\nزیرمجموعه: $path",
+                    dayOfMonth = date.day,
+                    jalaliYear = date.year,
+                    jalaliMonth = date.month,
+                    jalaliDay = date.day,
+                    priority = TaskPriority.NORMAL
+                )
+            )
+        }
+        leaves.size
     }
 
-    private fun DailyTaskInstance.toItem(): TaskItem = TaskItem(
+    suspend fun getFutureAlarms(): List<TaskItem> = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        val projects = dao.getProjects().associateBy { it.id }
+        val nodes = dao.getAllMindMapNodes().associateBy { it.id }
+        (dao.getFutureDailyTasksWithAlarms(now).map { it.toItem(projects, nodes) } +
+            dao.getFutureOneTimeTasksWithAlarms(now).map { it.toItem(projects, nodes) })
+            .filter { it.alarmAtMillis != null && !it.status.isClosed() }
+    }
+
+    fun toEpochMillis(date: JalaliDate, hour: Int, minute: Int): Long {
+        return date.toGregorian()
+            .atTime(hour.coerceIn(0, 23), minute.coerceIn(0, 59))
+            .atZone(ZoneId.systemDefault())
+            .toInstant()
+            .toEpochMilli()
+    }
+
+    private fun DailyTaskInstance.toItem(projects: Map<Long, Project>, nodes: Map<Long, MindMapNode>): TaskItem = TaskItem(
         id = id,
         origin = TaskOrigin.DAILY_INSTANCE,
         sourceTemplateId = sourceTemplateId,
+        projectId = projectId,
+        projectName = projectId?.let { projects[it]?.name },
+        sourceMindMapNodeId = sourceMindMapNodeId,
+        mindMapPath = sourceMindMapNodeId?.let { buildMindMapPath(it, nodes) },
         title = title,
         description = description,
         dayOfMonth = dayOfMonth,
@@ -244,15 +386,20 @@ class TaskRepository(private val dao: TaskDao) {
         taskType = taskType,
         status = status,
         priority = priority,
+        alarmAtMillis = alarmAtMillis,
         createdAt = createdAt,
         updatedAt = updatedAt,
         movedFromDate = movedFromDate,
         movedToDate = movedToDate
     )
 
-    private fun OneTimeTask.toItem(): TaskItem = TaskItem(
+    private fun OneTimeTask.toItem(projects: Map<Long, Project>, nodes: Map<Long, MindMapNode>): TaskItem = TaskItem(
         id = id,
         origin = TaskOrigin.ONE_TIME,
+        projectId = projectId,
+        projectName = projectId?.let { projects[it]?.name },
+        sourceMindMapNodeId = sourceMindMapNodeId,
+        mindMapPath = sourceMindMapNodeId?.let { buildMindMapPath(it, nodes) },
         title = title,
         description = description,
         dayOfMonth = dayOfMonth,
@@ -262,11 +409,25 @@ class TaskRepository(private val dao: TaskDao) {
         taskType = taskType,
         status = status,
         priority = priority,
+        alarmAtMillis = alarmAtMillis,
         createdAt = createdAt,
         updatedAt = updatedAt,
         movedFromDate = movedFromDate,
         movedToDate = movedToDate
     )
+
+    private fun buildMindMapPath(id: Long, nodes: Map<Long, MindMapNode>): String {
+        val parts = mutableListOf<String>()
+        var current = nodes[id]
+        var guard = 0
+        while (current != null && guard < 20) {
+            parts.add(current.title)
+            current = current.parentId?.let { nodes[it] }
+            guard++
+        }
+        return parts.asReversed().joinToString(" › ")
+    }
+
 }
 
 data class MonthlyReport(

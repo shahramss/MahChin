@@ -28,6 +28,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.mahchin.app.ui.screens.CalendarScreen
 import com.mahchin.app.ui.screens.MonthlyTemplateScreen
+import com.mahchin.app.ui.screens.MindMapScreen
 import com.mahchin.app.ui.screens.ReportScreen
 import com.mahchin.app.ui.screens.SettingsScreen
 import com.mahchin.app.ui.screens.TodayScreen
@@ -37,6 +38,7 @@ sealed class BottomItem(val route: String, val title: String, val icon: @Composa
     data object Today : BottomItem("today", "امروز", { Icon(Icons.Default.Today, contentDescription = null) })
     data object Calendar : BottomItem("calendar", "تقویم", { Icon(Icons.Default.CalendarMonth, contentDescription = null) })
     data object Template : BottomItem("template", "قالب", { Icon(Icons.Default.ViewList, contentDescription = null) })
+    data object MindMap : BottomItem("mindmap", "مایندمپ", { Icon(Icons.Default.ViewList, contentDescription = null) })
     data object Report : BottomItem("report", "گزارش", { Icon(Icons.Default.Assessment, contentDescription = null) })
     data object Settings : BottomItem("settings", "تنظیمات", { Icon(Icons.Default.Settings, contentDescription = null) })
 }
@@ -44,7 +46,7 @@ sealed class BottomItem(val route: String, val title: String, val icon: @Composa
 @Composable
 fun MahChinApp(viewModel: MainViewModel) {
     val navController = rememberNavController()
-    val items = listOf(BottomItem.Today, BottomItem.Calendar, BottomItem.Template, BottomItem.Report, BottomItem.Settings)
+    val items = listOf(BottomItem.Today, BottomItem.Calendar, BottomItem.Template, BottomItem.MindMap, BottomItem.Report, BottomItem.Settings)
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -93,6 +95,7 @@ fun MahChinApp(viewModel: MainViewModel) {
             composable(BottomItem.Today.route) { TodayScreen(viewModel) }
             composable(BottomItem.Calendar.route) { CalendarScreen(viewModel) }
             composable(BottomItem.Template.route) { MonthlyTemplateScreen(viewModel) }
+            composable(BottomItem.MindMap.route) { MindMapScreen(viewModel) }
             composable(BottomItem.Report.route) { ReportScreen(viewModel) }
             composable(BottomItem.Settings.route) { SettingsScreen(viewModel) }
         }

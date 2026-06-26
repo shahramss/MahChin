@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Alarm
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
@@ -63,6 +64,7 @@ fun TaskCard(
     onCancel: () -> Unit,
     onInProgress: () -> Unit,
     onReset: (() -> Unit)? = null,
+    onSetAlarm: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val closed = task.status.isClosed()
@@ -136,6 +138,9 @@ fun TaskCard(
                         fontWeight = FontWeight.SemiBold,
                         color = if (closed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
                     )
+                    if (task.alarmAtMillis != null) {
+                        MiniPill("آلارم", Color(0xFF7DD3FC))
+                    }
                     if (priorityText != null) {
                         MiniPill(priorityText, if (task.priority == TaskPriority.URGENT) Color(0xFFFF6B6B) else Color(0xFFFFB454))
                     }
@@ -161,10 +166,11 @@ fun TaskCard(
                     )
                     Text("•", color = MaterialTheme.colorScheme.outline)
                     Text(
-                        text = task.taskType.fa,
+                        text = task.projectName ?: task.taskType.fa,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -201,7 +207,7 @@ fun TaskCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "برای خلوت ماندن صفحه، گزینه‌ها با نگه‌داشتن روی تسک باز می‌شوند.",
+                    text = listOfNotNull(task.projectName, task.mindMapPath).joinToString(" • ").ifBlank { "گزینه‌ها با نگه‌داشتن روی تسک باز می‌شوند." },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -223,6 +229,9 @@ fun TaskCard(
                     ActionRow("لغو برای امروز", Icons.Outlined.Close) { showActions = false; onCancel() }
                 }
 
+                onSetAlarm?.let {
+                    ActionRow("تنظیم آلارم", Icons.Outlined.Alarm) { showActions = false; it() }
+                }
                 HorizontalDivider(Modifier.padding(vertical = 6.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
                 ActionRow("ویرایش", Icons.Outlined.Edit) { showActions = false; onEdit() }
                 ActionRow("حذف", Icons.Outlined.Delete, danger = true) { showActions = false; onDelete() }

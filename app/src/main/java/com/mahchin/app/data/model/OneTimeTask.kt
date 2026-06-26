@@ -6,6 +6,8 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "one_time_tasks")
 data class OneTimeTask(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val projectId: Long? = null,
+    val sourceMindMapNodeId: Long? = null,
     val title: String,
     val description: String = "",
     val dayOfMonth: Int,
@@ -15,6 +17,7 @@ data class OneTimeTask(
     val taskType: TaskType = TaskType.ONE_TIME,
     val status: TaskStatus = TaskStatus.NOT_STARTED,
     val priority: TaskPriority = TaskPriority.NORMAL,
+    val alarmAtMillis: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val movedFromDate: String? = null,

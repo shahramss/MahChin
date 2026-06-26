@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Alarm
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
@@ -57,14 +58,17 @@ import com.mahchin.app.data.model.MonthlyTemplateTask
 import com.mahchin.app.data.model.TaskPriority
 import com.mahchin.app.data.model.TaskStatus
 import com.mahchin.app.domain.toPersianDigits
+import com.mahchin.app.ui.components.TaskAlarmDialog
 import com.mahchin.app.ui.components.TaskEditorDialog
 import com.mahchin.app.ui.viewmodel.MainViewModel
 
 @Composable
 fun MonthlyTemplateScreen(vm: MainViewModel) {
     val templates by vm.templates.collectAsState()
+    val projects by vm.projects.collectAsState()
     var addDialog by remember { mutableStateOf(false) }
     var editTemplate by remember { mutableStateOf<MonthlyTemplateTask?>(null) }
+    var alarmTemplate by remember { mutableStateOf<MonthlyTemplateTask?>(null) }
 
     Box(
         modifier = Modifier
@@ -113,7 +117,8 @@ fun MonthlyTemplateScreen(vm: MainViewModel) {
                         template = item,
                         onToggle = { vm.toggleTemplateDone(item) },
                         onEdit = { editTemplate = item },
-                        onDelete = { vm.deleteTemplate(item.id) }
+                        onDelete = { vm.deleteTemplate(item.id) },
+                        onAlarm = { alarmTemplate = item }
                     )
                 }
             }
@@ -139,10 +144,11 @@ fun MonthlyTemplateScreen(vm: MainViewModel) {
     if (addDialog) {
         TaskEditorDialog(
             titleText = "تسک ثابت ماهانه",
+            projects = projects,
             dayOfMonth = 1,
             onDismiss = { addDialog = false },
-            onSave = { title, desc, day, priority ->
-                vm.addTemplateTask(title, desc, day ?: 1, priority)
+            onSave = { title, desc, day, priority, projectId ->
+                vm.addTemplateTask(title, desc, day ?: 1, priority, projectId)
                 addDialog = false
             }
         )
@@ -154,11 +160,30 @@ fun MonthlyTemplateScreen(vm: MainViewModel) {
             initialTitle = t.title,
             initialDescription = t.description,
             initialPriority = t.priority,
+            initialProjectId = t.projectId,
+            projects = projects,
             dayOfMonth = t.dayOfMonth,
             onDismiss = { editTemplate = null },
-            onSave = { title, desc, day, priority ->
-                vm.updateTemplate(t.id, title, desc, day ?: t.dayOfMonth, priority)
+            onSave = { title, desc, day, priority, projectId ->
+                vm.updateTemplate(t.id, title, desc, day ?: t.dayOfMonth, priority, projectId)
                 editTemplate = null
+            }
+        )
+    }
+
+    alarmTemplate?.let { t ->
+        TaskAlarmDialog(
+            initialDate = vm.today.copy(day = t.dayOfMonth.coerceAtMost(com.mahchin.app.domain.JalaliCalendar.monthLength(vm.today.year, vm.today.month))),
+            initialHour = t.alarmHour ?: 8,
+            initialMinute = t.alarmMinute ?: 0,
+            onDismiss = { alarmTemplate = null },
+            onClear = {
+                vm.setTemplateAlarm(t.id, null, null)
+                alarmTemplate = null
+            },
+            onSave = { _, hour, minute ->
+                vm.setTemplateAlarm(t.id, hour, minute)
+                alarmTemplate = null
             }
         )
     }
@@ -170,7 +195,8 @@ private fun TemplateTodoCard(
     template: MonthlyTemplateTask,
     onToggle: () -> Unit,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onAlarm: () -> Unit
 ) {
     var showActions by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -224,6 +250,9 @@ private fun TemplateTodoCard(
                         fontWeight = FontWeight.SemiBold,
                         color = if (checked) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
                     )
+                    if (template.alarmHour != null) {
+                        TemplatePill("آلارم", Color(0xFF7DD3FC))
+                    }
                     if (priorityText != null) {
                         TemplatePill(priorityText, if (template.priority == TaskPriority.URGENT) Color(0xFFFF6B6B) else Color(0xFFFFB454))
                     }
@@ -282,6 +311,7 @@ private fun TemplateTodoCard(
                     if (checked) "برداشتن تیک" else "تیک زدن",
                     if (checked) Icons.Outlined.RadioButtonUnchecked else Icons.Outlined.CheckCircle
                 ) { showActions = false; onToggle() }
+                TemplateActionRow("آلارم ماهانه", Icons.Outlined.Alarm) { showActions = false; onAlarm() }
                 HorizontalDivider(Modifier.padding(vertical = 6.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
                 TemplateActionRow("ویرایش", Icons.Outlined.Edit) { showActions = false; onEdit() }
                 TemplateActionRow("حذف", Icons.Outlined.Delete, danger = true) { showActions = false; onDelete() }

@@ -11,6 +11,8 @@ import androidx.room.PrimaryKey
 data class DailyTaskInstance(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val sourceTemplateId: Long? = null,
+    val projectId: Long? = null,
+    val sourceMindMapNodeId: Long? = null,
     val title: String,
     val description: String = "",
     val dayOfMonth: Int,
@@ -20,6 +22,7 @@ data class DailyTaskInstance(
     val taskType: TaskType = TaskType.DAILY_FROM_TEMPLATE,
     val status: TaskStatus = TaskStatus.NOT_STARTED,
     val priority: TaskPriority = TaskPriority.NORMAL,
+    val alarmAtMillis: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val movedFromDate: String? = null,
