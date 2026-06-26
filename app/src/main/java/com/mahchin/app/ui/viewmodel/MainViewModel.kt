@@ -65,6 +65,12 @@ class MainViewModel(
         emptyList()
     )
 
+    val allMindMapNodes: StateFlow<List<MindMapNode>> = repository.allMindMapNodesFlow.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList()
+    )
+
     @OptIn(ExperimentalCoroutinesApi::class)
     val mindMapNodes: StateFlow<List<MindMapNode>> = selectedProjectId.flatMapLatest { id ->
         if (id == null) kotlinx.coroutines.flow.flowOf(emptyList()) else repository.observeMindMapNodes(id)
@@ -115,6 +121,20 @@ class MainViewModel(
         viewModelScope.launch {
             val id = repository.addProject(name)
             _selectedProjectId.value = id
+        }
+    }
+
+    fun updateProject(projectId: Long, name: String) {
+        if (name.isBlank()) return
+        viewModelScope.launch { repository.updateProject(projectId, name) }
+    }
+
+    fun deleteProject(projectId: Long) {
+        viewModelScope.launch {
+            val replacementId = repository.deleteProject(projectId)
+            if (_selectedProjectId.value == projectId && replacementId != null) {
+                _selectedProjectId.value = replacementId
+            }
         }
     }
 
@@ -214,6 +234,17 @@ class MainViewModel(
         viewModelScope.launch {
             repository.setStatus(item, status)
             if (status.isClosed()) TaskAlarmScheduler.cancel(app, item)
+            ReminderScheduler.scheduleImmediateCheck(app)
+        }
+    }
+
+    fun setTaskGroupStatus(items: List<TaskItem>, status: TaskStatus) {
+        if (items.isEmpty()) return
+        viewModelScope.launch {
+            items.forEach { item ->
+                repository.setStatus(item, status)
+                if (status.isClosed()) TaskAlarmScheduler.cancel(app, item)
+            }
             ReminderScheduler.scheduleImmediateCheck(app)
         }
     }

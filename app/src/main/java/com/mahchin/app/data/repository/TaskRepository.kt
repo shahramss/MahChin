@@ -25,6 +25,7 @@ class TaskRepository(private val dao: TaskDao) {
     val settingsFlow: Flow<UserSettings> = dao.observeSettings().map { it ?: UserSettings() }
     val templatesFlow: Flow<List<MonthlyTemplateTask>> = dao.observeTemplates()
     val projectsFlow: Flow<List<Project>> = dao.observeProjects()
+    val allMindMapNodesFlow: Flow<List<MindMapNode>> = dao.observeAllMindMapNodes()
 
     suspend fun getSettingsOrDefault(): UserSettings = withContext(Dispatchers.IO) {
         dao.getSettings() ?: UserSettings().also { dao.upsertSettings(it) }
@@ -49,6 +50,21 @@ class TaskRepository(private val dao: TaskDao) {
         dao.insertProject(Project(name = clean))
     }
 
+    suspend fun updateProject(id: Long, name: String) = withContext(Dispatchers.IO) {
+        val clean = name.trim().ifBlank { "پروژه" }
+        dao.getProject(id)?.let { project ->
+            dao.updateProject(project.copy(name = clean, updatedAt = System.currentTimeMillis()))
+        }
+    }
+
+    suspend fun deleteProject(id: Long): Long? = withContext(Dispatchers.IO) {
+        val active = dao.getProjects()
+        if (active.size <= 1) return@withContext active.firstOrNull()?.id
+        val project = dao.getProject(id) ?: return@withContext active.firstOrNull()?.id
+        dao.updateProject(project.copy(isActive = false, updatedAt = System.currentTimeMillis()))
+        dao.getProjects().firstOrNull()?.id ?: ensureDefaultProject()
+    }
+
     fun observeMindMapNodes(projectId: Long): Flow<List<MindMapNode>> = dao.observeMindMapNodes(projectId)
 
     suspend fun addMindMapNode(projectId: Long, parentId: Long?, title: String, description: String = ""): Long = withContext(Dispatchers.IO) {
@@ -69,7 +85,13 @@ class TaskRepository(private val dao: TaskDao) {
     }
 
     suspend fun deleteMindMapNode(id: Long) = withContext(Dispatchers.IO) {
-        dao.getMindMapNode(id)?.let { dao.updateMindMapNode(it.copy(isActive = false, updatedAt = System.currentTimeMillis())) }
+        val node = dao.getMindMapNode(id) ?: return@withContext
+        val allProjectNodes = dao.getMindMapNodes(node.projectId)
+        val idsToDelete = collectDescendantIds(id, allProjectNodes).plus(id).toSet()
+        val now = System.currentTimeMillis()
+        allProjectNodes.filter { it.id in idsToDelete }.forEach {
+            dao.updateMindMapNode(it.copy(isActive = false, updatedAt = now))
+        }
     }
 
     suspend fun addTemplateTask(
@@ -328,19 +350,20 @@ class TaskRepository(private val dao: TaskDao) {
     suspend fun createTasksFromMindMap(projectId: Long, startDate: JalaliDate, tasksPerDay: Int): Int = withContext(Dispatchers.IO) {
         val nodes = dao.getMindMapNodes(projectId)
         if (nodes.isEmpty()) return@withContext 0
-        val childParentIds = nodes.mapNotNull { it.parentId }.toSet()
-        val leaves = nodes.filter { it.id !in childParentIds && it.parentId != null }.ifEmpty { nodes }
+        val nodeMap = nodes.associateBy { it.id }
+        val children = nodes.groupBy { it.parentId }
+        val taskNodes = orderedLeafNodes(children[null].orEmpty(), children).ifEmpty { nodes.filter { it.parentId != null } }
         val projectName = dao.getProject(projectId)?.name ?: "پروژه"
         val perDay = tasksPerDay.coerceIn(1, 20)
-        leaves.forEachIndexed { index, node ->
+        taskNodes.forEachIndexed { index, node ->
             val date = startDate.plusDays((index / perDay).toLong())
-            val path = buildMindMapPath(node.id, nodes.associateBy { it.id })
+            val path = buildMindMapPath(node.id, nodeMap)
             dao.insertOneTimeTask(
                 OneTimeTask(
                     projectId = projectId,
                     sourceMindMapNodeId = node.id,
                     title = node.title,
-                    description = "پروژه: $projectName\nزیرمجموعه: $path",
+                    description = "پروژه: $projectName\nمسیر: $path",
                     dayOfMonth = date.day,
                     jalaliYear = date.year,
                     jalaliMonth = date.month,
@@ -349,7 +372,21 @@ class TaskRepository(private val dao: TaskDao) {
                 )
             )
         }
-        leaves.size
+        taskNodes.size
+    }
+
+    private fun orderedLeafNodes(roots: List<MindMapNode>, children: Map<Long?, List<MindMapNode>>): List<MindMapNode> {
+        val result = mutableListOf<MindMapNode>()
+        fun visit(node: MindMapNode) {
+            val childList = children[node.id].orEmpty()
+            if (childList.isEmpty()) {
+                result += node
+            } else {
+                childList.forEach { visit(it) }
+            }
+        }
+        roots.forEach { visit(it) }
+        return result
     }
 
     suspend fun getFutureAlarms(): List<TaskItem> = withContext(Dispatchers.IO) {
@@ -415,6 +452,11 @@ class TaskRepository(private val dao: TaskDao) {
         movedFromDate = movedFromDate,
         movedToDate = movedToDate
     )
+
+    private fun collectDescendantIds(parentId: Long, nodes: List<MindMapNode>): List<Long> {
+        val children = nodes.filter { it.parentId == parentId && it.isActive }
+        return children.flatMap { child -> listOf(child.id) + collectDescendantIds(child.id, nodes) }
+    }
 
     private fun buildMindMapPath(id: Long, nodes: Map<Long, MindMapNode>): String {
         val parts = mutableListOf<String>()

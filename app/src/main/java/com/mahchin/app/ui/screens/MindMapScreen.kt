@@ -64,6 +64,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mahchin.app.data.model.MindMapNode
 import com.mahchin.app.domain.JalaliCalendar
@@ -85,6 +86,9 @@ fun MindMapScreen(vm: MainViewModel) {
 
     var projectMenu by remember { mutableStateOf(false) }
     var addProjectDialog by remember { mutableStateOf(false) }
+    var editProjectDialog by remember { mutableStateOf(false) }
+    var deleteProjectDialog by remember { mutableStateOf(false) }
+    var projectActions by remember { mutableStateOf(false) }
     var nodeDialog by remember { mutableStateOf<NodeDialogState?>(null) }
     var distributeDialog by remember { mutableStateOf(false) }
     var actionNode by remember { mutableStateOf<MindMapNode?>(null) }
@@ -155,10 +159,10 @@ fun MindMapScreen(vm: MainViewModel) {
                     }
                 }
                 OutlinedButton(
-                    onClick = { addProjectDialog = true },
+                    onClick = { projectActions = true },
                     modifier = Modifier.height(56.dp),
                     shape = RoundedCornerShape(16.dp)
-                ) { Text("پروژه +") }
+                ) { Text("پروژه", maxLines = 1, softWrap = false) }
             }
 
             XMindLikeCanvasCard(
@@ -190,13 +194,46 @@ fun MindMapScreen(vm: MainViewModel) {
     }
 
     if (addProjectDialog) {
-        AddProjectDialog(
+        ProjectEditorDialog(
+            title = "پروژه جدید",
+            initialName = "",
             onDismiss = { addProjectDialog = false },
             onSave = {
                 vm.addProject(it)
                 selectedNodeId = null
                 addProjectDialog = false
             }
+        )
+    }
+
+    if (editProjectDialog && selectedProject != null) {
+        ProjectEditorDialog(
+            title = "ویرایش پروژه",
+            initialName = selectedProject.name,
+            onDismiss = { editProjectDialog = false },
+            onSave = {
+                vm.updateProject(selectedProject.id, it)
+                editProjectDialog = false
+            }
+        )
+    }
+
+    if (deleteProjectDialog && selectedProject != null) {
+        AlertDialog(
+            onDismissRequest = { deleteProjectDialog = false },
+            title = { Text("حذف پروژه") },
+            text = { Text("پروژه «${selectedProject.name}» حذف شود؟ اگر تنها پروژه باشد حذف نمی‌شود.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        vm.deleteProject(selectedProject.id)
+                        selectedNodeId = null
+                        deleteProjectDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5C5C))
+                ) { Text("حذف") }
+            },
+            dismissButton = { TextButton(onClick = { deleteProjectDialog = false }) { Text("انصراف") } }
         )
     }
 
@@ -223,6 +260,28 @@ fun MindMapScreen(vm: MainViewModel) {
                 vm.makeTasksFromMindMap(date, perDay)
                 distributeDialog = false
             }
+        )
+    }
+
+    if (projectActions) {
+        MindMapActionSheet(
+            title = selectedProject?.name ?: "پروژه",
+            subtitle = "مدیریت پروژه‌ها؛ اضافه، ویرایش یا حذف پروژه فعلی.",
+            onDismiss = { projectActions = false },
+            actions = listOf(
+                MindAction("افزودن پروژه", Icons.Outlined.Add) {
+                    projectActions = false
+                    addProjectDialog = true
+                },
+                MindAction("ویرایش پروژه فعلی", Icons.Outlined.Edit) {
+                    projectActions = false
+                    editProjectDialog = selectedProject != null
+                },
+                MindAction("حذف پروژه فعلی", Icons.Outlined.Delete, danger = true) {
+                    projectActions = false
+                    deleteProjectDialog = selectedProject != null
+                }
+            )
         )
     }
 
@@ -542,7 +601,7 @@ private fun MindMapBottomBar(
             ) {
                 Icon(Icons.Outlined.Add, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("شاخه")
+                ToolbarButtonText("شاخه")
             }
             Button(
                 onClick = onAddChild,
@@ -552,21 +611,32 @@ private fun MindMapBottomBar(
             ) {
                 Icon(Icons.Outlined.Add, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("زیرشاخه")
+                ToolbarButtonText("زیرشاخه")
             }
             OutlinedButton(
                 onClick = onEditSelected,
                 enabled = selectedNode != null,
                 modifier = Modifier.weight(0.85f).height(48.dp),
                 shape = RoundedCornerShape(18.dp)
-            ) { Text("ویرایش") }
+            ) { ToolbarButtonText("ویرایش") }
             OutlinedButton(
                 onClick = onDistribute,
                 modifier = Modifier.weight(0.95f).height(48.dp),
                 shape = RoundedCornerShape(18.dp)
-            ) { Text("تسک") }
+            ) { ToolbarButtonText("تسک") }
         }
     }
+}
+
+@Composable
+private fun ToolbarButtonText(text: String) {
+    Text(
+        text = text,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Ellipsis,
+        style = MaterialTheme.typography.labelLarge
+    )
 }
 
 private fun buildXMindGraph(
@@ -865,21 +935,26 @@ private fun MindActionRow(
 }
 
 @Composable
-private fun AddProjectDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
-    var title by remember { mutableStateOf("") }
+private fun ProjectEditorDialog(
+    title: String,
+    initialName: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var projectName by remember(initialName) { mutableStateOf(initialName) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("پروژه جدید") },
+        title = { Text(title) },
         text = {
             OutlinedTextField(
-                value = title,
-                onValueChange = { title = it },
+                value = projectName,
+                onValueChange = { projectName = it },
                 label = { Text("نام پروژه") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
         },
-        confirmButton = { Button(onClick = { onSave(title) }) { Text("ذخیره") } },
+        confirmButton = { Button(onClick = { onSave(projectName) }) { Text("ذخیره") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("انصراف") } }
     )
 }
@@ -933,7 +1008,7 @@ private fun DistributeMindMapDialog(
         title = { Text("تقسیم مایندمپ به تسک") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("زیرشاخه‌های نهایی به ترتیب، روزی چند تا در تقویم پخش شوند؟")
+                Text("زیرشاخه‌های نهایی به ترتیب، زیر پروژه و مسیر شاخه‌ها جمع می‌شوند. روزی چند کار ساخته شود؟")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     SmallNumberField("سال", year, { year = it }, Modifier.weight(1f))
                     SmallNumberField("ماه", month, { month = it }, Modifier.weight(1f))

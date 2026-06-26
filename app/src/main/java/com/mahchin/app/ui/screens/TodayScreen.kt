@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
@@ -42,7 +41,7 @@ import com.mahchin.app.data.model.TaskItem
 import com.mahchin.app.domain.JalaliCalendar
 import com.mahchin.app.domain.toPersianDigits
 import com.mahchin.app.ui.components.JalaliDateDialog
-import com.mahchin.app.ui.components.TaskCard
+import com.mahchin.app.ui.components.MindMapAwareTaskList
 import com.mahchin.app.ui.components.TaskEditorDialog
 import com.mahchin.app.ui.components.TaskAlarmDialog
 import com.mahchin.app.ui.viewmodel.MainViewModel
@@ -52,6 +51,7 @@ fun TodayScreen(vm: MainViewModel) {
     val tasks by vm.todayTasks.collectAsState()
     val settings by vm.settings.collectAsState()
     val projects by vm.projects.collectAsState()
+    val mindMapNodes by vm.allMindMapNodes.collectAsState()
     val today = vm.today
     val done = tasks.count { it.status.isClosed() }
     val remaining = tasks.size - done
@@ -151,18 +151,20 @@ fun TodayScreen(vm: MainViewModel) {
                     }
                 }
             } else {
-                items(tasks, key = { it.origin.name + it.id }) { task ->
-                    TaskCard(
-                        task = task,
-                        onDone = { vm.toggleDone(task) },
-                        onEdit = { editTask = task },
-                        onDelete = { vm.deleteTask(task) },
-                        onMoveTomorrow = { vm.moveToTomorrow(task) },
-                        onMoveCustom = { moveTask = task },
-                        onCancel = { vm.cancelToday(task) },
-                        onInProgress = { vm.inProgress(task) },
-                        onReset = { vm.resetStatus(task) },
-                        onSetAlarm = { alarmTask = task }
+                item {
+                    MindMapAwareTaskList(
+                        tasks = tasks,
+                        mindMapNodes = mindMapNodes,
+                        onSetGroupStatus = { groupTasks, status -> vm.setTaskGroupStatus(groupTasks, status) },
+                        onDone = { task -> vm.toggleDone(task) },
+                        onEdit = { task -> editTask = task },
+                        onDelete = { task -> vm.deleteTask(task) },
+                        onMoveTomorrow = { task -> vm.moveToTomorrow(task) },
+                        onMoveCustom = { task -> moveTask = task },
+                        onCancel = { task -> vm.cancelToday(task) },
+                        onInProgress = { task -> vm.inProgress(task) },
+                        onReset = { task -> vm.resetStatus(task) },
+                        onSetAlarm = { task -> alarmTask = task }
                     )
                 }
             }
