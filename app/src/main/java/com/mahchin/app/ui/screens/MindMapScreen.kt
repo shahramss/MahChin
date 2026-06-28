@@ -873,6 +873,59 @@ private fun subtreeLeafCount(node: MindMapNode, children: Map<Long?, List<MindMa
     return if (list.isEmpty()) 1 else list.sumOf { subtreeLeafCount(it, children) }
 }
 
+
+private fun resolveGraphOverlaps(nodes: List<GraphNode>, pixelScale: Float): List<GraphNode> {
+    if (nodes.size <= 2) return nodes
+    val fixed = nodes.toMutableList()
+    val centerIndex = fixed.indexOfFirst { it.node == null }
+    val minGap = 72f * pixelScale
+    repeat(10) {
+        var changed = false
+        for (i in fixed.indices) {
+            for (j in i + 1 until fixed.size) {
+                if (i == centerIndex || j == centerIndex) continue
+                val a = fixed[i]
+                val b = fixed[j]
+                val dx = b.center.x - a.center.x
+                val dy = b.center.y - a.center.y
+                val overlapX = (a.width + b.width) / 2f + minGap - kotlin.math.abs(dx)
+                val overlapY = (a.height + b.height) / 2f + minGap - kotlin.math.abs(dy)
+                if (overlapX > 0f && overlapY > 0f) {
+                    val moveX = if (dx >= 0f) overlapX / 2f else -overlapX / 2f
+                    val moveY = if (dy >= 0f) overlapY / 2f else -overlapY / 2f
+                    fixed[i] = a.copy(center = Offset(a.center.x - moveX, a.center.y - moveY))
+                    fixed[j] = b.copy(center = Offset(b.center.x + moveX, b.center.y + moveY))
+                    changed = true
+                }
+            }
+        }
+        if (!changed) return fixed
+    }
+    return fixed
+}
+
+private fun rebuildGraphLines(nodes: List<GraphNode>, primary: Color): List<GraphLine> {
+    val nodeById = nodes.mapNotNull { graphNode -> graphNode.node?.id?.let { it to graphNode } }.toMap()
+    val center = nodes.firstOrNull { it.node == null }
+    return nodes.mapNotNull { child ->
+        val node = child.node ?: return@mapNotNull null
+        val parent = node.parentId?.let { nodeById[it] } ?: center ?: return@mapNotNull null
+        val from = parent.center
+        val to = child.center
+        val direction = (to - from).normalizedOr(Offset(1f, 0f))
+        val start = from + direction * (parent.width / 2f)
+        val end = to - direction * (child.width / 2f)
+        val color = if (parent.node == null) child.color else parent.color
+        GraphLine(
+            from = start,
+            to = end,
+            color = color,
+            side = if (direction.x >= 0f) 1 else -1,
+            angle = atan2(direction.y, direction.x)
+        )
+    }
+}
+
 private fun nodeWidth(title: String, level: Int, pixelScale: Float): Float {
     val lines = title.wrapNodeTitle(level)
     val longest = lines.maxOfOrNull { it.length } ?: 8
