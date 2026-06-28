@@ -504,9 +504,9 @@ private fun XMindLikeCanvasCard(
                     val nodeH = graphNode.height * scale
                     val topLeft = Offset(center.x - nodeW / 2f, center.y - nodeH / 2f)
                     val radiusValue = when (graphNode.level) {
-                        0 -> 20f
-                        1 -> 16f
-                        else -> 14f
+                        0 -> 24f
+                        1 -> 20f
+                        else -> 18f
                     } * scale
                     val radius = CornerRadius(radiusValue, radiusValue)
 
@@ -890,15 +890,15 @@ private fun layoutChildrenStrictTree(
 private fun branchBlockHeight(node: MindMapNode, level: Int, children: Map<Long?, List<MindMapNode>>, pixelScale: Float): Float {
     val own = nodeHeight(node.title, level, pixelScale)
     val directChildren = children[node.id].orEmpty().filter { it.isActive }
-    if (directChildren.isEmpty()) return own + 16f * pixelScale
+    if (directChildren.isEmpty()) return own + 22f * pixelScale
     val kids = directChildren.sumOf { branchBlockHeight(it, level + 1, children, pixelScale).toDouble() }.toFloat() +
         (directChildren.size - 1).coerceAtLeast(0) * childVerticalGap(level + 1, pixelScale)
-    return max(own, kids) + 22f * pixelScale
+    return max(own, kids) + 30f * pixelScale
 }
 
-private fun rootVerticalGap(pixelScale: Float): Float = 150f * pixelScale
-private fun childVerticalGap(level: Int, pixelScale: Float): Float = (when (level) { 2 -> 88f; 3 -> 70f; else -> 54f }) * pixelScale
-private fun horizontalGap(level: Int, pixelScale: Float): Float = (when (level) { 2 -> 214f; 3 -> 174f; else -> 146f }) * pixelScale
+private fun rootVerticalGap(pixelScale: Float): Float = 170f * pixelScale
+private fun childVerticalGap(level: Int, pixelScale: Float): Float = (when (level) { 2 -> 104f; 3 -> 82f; else -> 64f }) * pixelScale
+private fun horizontalGap(level: Int, pixelScale: Float): Float = (when (level) { 2 -> 228f; 3 -> 188f; else -> 158f }) * pixelScale
 
 private fun addGraphLine(lines: MutableList<GraphLine>, fromCenter: Offset, fromWidth: Float, fromHeight: Float, toCenter: Offset, toWidth: Float, toHeight: Float, color: Color, lineSide: Int) {
     val start = edgePoint(fromCenter, fromWidth, fromHeight, toCenter)
@@ -914,15 +914,7 @@ private fun edgePoint(center: Offset, width: Float, height: Float, toward: Offse
 }
 
 private fun rootFamilyColor(node: MindMapNode, activeNodes: List<MindMapNode>, children: Map<Long?, List<MindMapNode>>, palette: List<Color>): Color {
-    val ordered = activeNodes.sortedWith(
-        compareBy<MindMapNode>(
-            { if (it.parentId == null) 0 else 1 },
-            { it.parentId ?: 0L },
-            { it.orderIndex },
-            { it.createdAt },
-            { it.id }
-        )
-    )
+    val ordered = activeNodes.sortedWith(compareBy<MindMapNode>({ it.parentId ?: -1L }, { it.orderIndex }, { it.createdAt }, { it.id }))
     val index = ordered.indexOfFirst { it.id == node.id }.coerceAtLeast(0)
     return palette[index % palette.size]
 }
@@ -932,9 +924,9 @@ private fun nodeWidth(title: String, level: Int, pixelScale: Float): Float {
     val paint = mindMapTextPaint(style.fontSize * pixelScale, level <= 1, Color.Black.toArgb())
     val prepared = title.preparedNodeText(level)
     val longestMeasured = prepared.lines().maxOfOrNull { paint.measureText(it) } ?: paint.measureText("بدون عنوان")
-    val minWidth = when (level) { 0 -> 250f; 1 -> 190f; 2 -> 164f; else -> 144f } * pixelScale
-    val maxWidth = when (level) { 0 -> 680f; 1 -> 560f; 2 -> 470f; else -> 400f } * pixelScale
-    val desired = longestMeasured * 1.05f + style.horizontalPadding * 2f * pixelScale
+    val minWidth = when (level) { 0 -> 270f; 1 -> 215f; 2 -> 188f; else -> 164f } * pixelScale
+    val maxWidth = when (level) { 0 -> 760f; 1 -> 640f; 2 -> 540f; else -> 460f } * pixelScale
+    val desired = longestMeasured * 1.16f + style.horizontalPadding * 2f * pixelScale
     return desired.coerceIn(minWidth, maxWidth)
 }
 
@@ -950,7 +942,7 @@ private fun nodeHeight(title: String, level: Int, pixelScale: Float): Float {
         width = innerWidth
     ).height.toFloat()
     val minHeight = when (level) { 0 -> 112f; 1 -> 82f; 2 -> 66f; else -> 56f } * pixelScale
-    return (layoutHeight + style.verticalPadding * 2f * pixelScale + 4f * pixelScale).coerceAtLeast(minHeight)
+    return (layoutHeight + style.verticalPadding * 2f * pixelScale + 8f * pixelScale).coerceAtLeast(minHeight)
 }
 
 private fun GraphNode.hit(point: Offset): Boolean {
@@ -1015,8 +1007,15 @@ private fun android.graphics.Canvas.drawXMindRtlTextInsideNode(
     textSize: Float,
     bold: Boolean
 ) {
-    val width = (right - left).toInt().coerceAtLeast(1)
-    val height = (bottom - top).coerceAtLeast(1f)
+    val style = nodeStyle(level)
+    val padX = style.horizontalPadding
+    val padY = style.verticalPadding
+    val innerLeft = left + padX
+    val innerTop = top + padY
+    val innerRight = right - padX
+    val innerBottom = bottom - padY
+    val width = (innerRight - innerLeft).toInt().coerceAtLeast(1)
+    val height = (innerBottom - innerTop).coerceAtLeast(1f)
     val layout = buildMindMapStaticLayout(
         text = text.preparedNodeText(level),
         textSize = textSize,
@@ -1024,10 +1023,10 @@ private fun android.graphics.Canvas.drawXMindRtlTextInsideNode(
         color = color,
         width = width
     )
-    val y = top + ((height - layout.height).coerceAtLeast(0f) / 2f)
+    val y = innerTop + ((height - layout.height).coerceAtLeast(0f) / 2f)
     save()
-    clipRect(left, top, right, bottom)
-    translate(left, y)
+    clipRect(innerLeft, innerTop, innerRight, innerBottom)
+    translate(innerLeft, y)
     layout.draw(this)
     restore()
 }
