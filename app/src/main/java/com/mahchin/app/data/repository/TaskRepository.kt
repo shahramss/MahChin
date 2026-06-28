@@ -363,7 +363,7 @@ class TaskRepository(private val dao: TaskDao) {
                     projectId = projectId,
                     sourceMindMapNodeId = node.id,
                     title = node.title,
-                    description = "پروژه: $projectName\nمسیر: $path",
+                    description = "مسیر: $path",
                     dayOfMonth = date.day,
                     jalaliYear = date.year,
                     jalaliMonth = date.month,

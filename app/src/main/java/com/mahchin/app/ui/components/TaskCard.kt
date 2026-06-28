@@ -131,7 +131,8 @@ fun TaskCard(
                         text = task.title,
                         modifier = Modifier.weight(1f),
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                        softWrap = false,
+                        overflow = TextOverflow.Clip,
                         style = MaterialTheme.typography.titleMedium.copy(
                             textDecoration = if (task.status == TaskStatus.DONE) TextDecoration.LineThrough else TextDecoration.None
                         ),
@@ -146,11 +147,22 @@ fun TaskCard(
                     }
                 }
 
-                if (task.description.isNotBlank()) {
+                val breadcrumb = task.mindMapPath
+                    ?.let { path -> listOfNotNull(task.projectName, path).joinToString("  ←  ") }
+                    .orEmpty()
+                if (breadcrumb.isNotBlank()) {
+                    Text(
+                        text = breadcrumb,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.88f),
+                        maxLines = 2,
+                        overflow = TextOverflow.Clip
+                    )
+                } else if (task.description.isNotBlank()) {
                     Text(
                         text = task.description,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                        maxLines = 2,
+                        overflow = TextOverflow.Clip,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -170,7 +182,8 @@ fun TaskCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        softWrap = false,
+                        overflow = TextOverflow.Clip
                     )
                 }
             }
@@ -204,7 +217,7 @@ fun TaskCard(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Clip
                 )
                 Text(
                     text = listOfNotNull(task.projectName, task.mindMapPath).joinToString(" • ").ifBlank { "گزینه‌ها با نگه‌داشتن روی تسک باز می‌شوند." },
