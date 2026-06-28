@@ -499,13 +499,14 @@ private fun XMindLikeCanvasCard(
                     val nodeW = graphNode.width * scale
                     val nodeH = graphNode.height * scale
                     val topLeft = Offset(center.x - nodeW / 2f, center.y - nodeH / 2f)
-                    val radius = CornerRadius(16f * scale, 16f * scale)
+                    // گره‌ها شبیه XMind: کپسولی/کارت باریک، با متن کاملاً داخل کادر.
+                    val radius = CornerRadius(9f * scale, 9f * scale)
 
                     drawRoundRect(
                         color = graphNode.color.copy(alpha = if (graphNode.selected) 0.22f else 0.12f),
                         topLeft = topLeft - Offset(3f * scale, 3f * scale),
                         size = Size(nodeW + 6f * scale, nodeH + 6f * scale),
-                        cornerRadius = CornerRadius(18f * scale, 18f * scale),
+                        cornerRadius = CornerRadius(11f * scale, 11f * scale),
                         style = Stroke(width = if (graphNode.selected) 2.4f * scale else 1.2f * scale)
                     )
                     val fillColor = when (graphNode.level) {
@@ -530,10 +531,10 @@ private fun XMindLikeCanvasCard(
                         )
                     }
                     val nodeTextSize = when (graphNode.level) {
-                        0 -> 12.8f
-                        1 -> 10.6f
-                        2 -> 9.8f
-                        else -> 9.2f
+                        0 -> 12.2f
+                        1 -> 9.4f
+                        2 -> 8.6f
+                        else -> 7.9f
                     } * density.density * scale
                     drawContext.canvas.nativeCanvas.save()
                     drawContext.canvas.nativeCanvas.clipRect(
@@ -960,29 +961,30 @@ private fun subtreeLeafCount(node: MindMapNode, children: Map<Long?, List<MindMa
 private fun nodeWidth(title: String, level: Int, pixelScale: Float): Float {
     val lines = title.wrapNodeTitle(level)
     val longest = lines.maxOfOrNull { it.length } ?: 8
+    // عرض گره مثل XMind بر اساس متن بزرگ می‌شود؛ دیگر متن بعد از دو کلمه نمی‌شکند.
     val charWidth = when (level) {
-        0 -> 9.1f
-        1 -> 8.2f
-        2 -> 7.6f
-        else -> 7.1f
+        0 -> 8.9f
+        1 -> 7.6f
+        2 -> 7.0f
+        else -> 6.5f
     }
     val horizontalPadding = when (level) {
-        0 -> 24f
-        1 -> 22f
-        2 -> 20f
-        else -> 18f
+        0 -> 40f
+        1 -> 34f
+        2 -> 30f
+        else -> 26f
     }
     val minWidth = when (level) {
-        0 -> 108f
-        1 -> 96f
-        2 -> 88f
-        else -> 82f
+        0 -> 118f
+        1 -> 92f
+        2 -> 82f
+        else -> 72f
     }
     val maxWidth = when (level) {
-        0 -> 178f
-        1 -> 156f
-        2 -> 142f
-        else -> 132f
+        0 -> 310f
+        1 -> 285f
+        2 -> 250f
+        else -> 225f
     }
     return ((longest * charWidth + horizontalPadding).coerceIn(minWidth, maxWidth)) * pixelScale
 }
@@ -990,23 +992,24 @@ private fun nodeWidth(title: String, level: Int, pixelScale: Float): Float {
 private fun nodeHeight(title: String, level: Int, pixelScale: Float): Float {
     val lines = title.wrapNodeTitle(level).size.coerceAtLeast(1)
     val lineHeight = when (level) {
-        0 -> 15.6f
-        1 -> 14.3f
-        2 -> 13.3f
-        else -> 12.6f
+        0 -> 15.8f
+        1 -> 13.1f
+        2 -> 12.0f
+        else -> 11.2f
     }
+    // Padding بالا/پایین بیشتر و چپ/راست متعادل‌تر شد تا کارت‌ها کشیده و شیک باشند.
     val verticalPadding = when (level) {
-        0 -> 34f
-        1 -> 31f
-        2 -> 29f
-        else -> 27f
+        0 -> 22f
+        1 -> 18f
+        2 -> 16f
+        else -> 14f
     }
     return ((verticalPadding + lines * lineHeight).coerceAtLeast(
         when (level) {
-            0 -> 56f
-            1 -> 50f
-            2 -> 46f
-            else -> 42f
+            0 -> 44f
+            1 -> 34f
+            2 -> 30f
+            else -> 27f
         }
     )) * pixelScale
 }
@@ -1036,33 +1039,43 @@ private fun Offset.normalizedOr(fallback: Offset): Offset {
 }
 
 private fun String.wrapNodeTitle(level: Int): List<String> {
-    val maxChars = when (level) {
-        0 -> 13
-        1 -> 11
-        2 -> 10
-        else -> 10
+    // قانون جدید: متن شبیه XMind تا حدود ۶ کلمه در هر خط می‌ماند.
+    // دیگر دوکلمه‌دوکلمه زیر هم نمی‌آید، مگر اینکه جمله خیلی طولانی باشد.
+    val maxWordsPerLine = 6
+    val maxCharsPerLine = when (level) {
+        0 -> 46
+        1 -> 42
+        2 -> 38
+        else -> 34
     }
     val words = trim().toPersianDigits().split(Regex("\\s+")).filter { it.isNotBlank() }
     if (words.isEmpty()) return listOf("بدون عنوان")
+
     val lines = mutableListOf<String>()
-    var current = ""
+    var currentWords = mutableListOf<String>()
+
+    fun currentText(): String = currentWords.joinToString(" ")
     fun flush() {
-        if (current.isNotBlank()) {
-            lines += current
-            current = ""
+        if (currentWords.isNotEmpty()) {
+            lines += currentText()
+            currentWords = mutableListOf()
         }
     }
-    words.forEach { word ->
-        if (word.length > maxChars) {
-            flush()
-            word.chunked(maxChars).forEach { lines += it }
-        } else if (current.isBlank()) {
-            current = word
-        } else if ((current.length + 1 + word.length) <= maxChars) {
-            current += " $word"
-        } else {
-            flush()
-            current = word
+
+    words.forEach { rawWord ->
+        val wordParts = if (rawWord.length > maxCharsPerLine) rawWord.chunked(maxCharsPerLine) else listOf(rawWord)
+        wordParts.forEach { word ->
+            if (currentWords.isEmpty()) {
+                currentWords += word
+            } else {
+                val candidate = currentText() + " " + word
+                if (currentWords.size < maxWordsPerLine && candidate.length <= maxCharsPerLine) {
+                    currentWords += word
+                } else {
+                    flush()
+                    currentWords += word
+                }
+            }
         }
     }
     flush()
