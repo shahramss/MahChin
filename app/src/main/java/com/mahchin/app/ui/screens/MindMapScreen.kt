@@ -531,22 +531,23 @@ private fun XMindLikeCanvasCard(
                         )
                     }
                     val nodeTextSize = when (graphNode.level) {
-                        0 -> 12.2f
+                        // نود مرکزی همان پروژه است؛ باید تقریباً دو برابر نودهای معمولی دیده شود.
+                        0 -> 18.8f
                         1 -> 9.4f
                         2 -> 8.6f
                         else -> 7.9f
                     } * density.density * scale
                     drawContext.canvas.nativeCanvas.save()
                     drawContext.canvas.nativeCanvas.clipRect(
-                        topLeft.x + 10f * scale,
-                        topLeft.y + 10f * scale,
-                        topLeft.x + nodeW - 10f * scale,
-                        topLeft.y + nodeH - 10f * scale
+                        topLeft.x + if (graphNode.level == 0) 18f * scale else 10f * scale,
+                        topLeft.y + if (graphNode.level == 0) 16f * scale else 10f * scale,
+                        topLeft.x + nodeW - if (graphNode.level == 0) 18f * scale else 10f * scale,
+                        topLeft.y + nodeH - if (graphNode.level == 0) 16f * scale else 10f * scale
                     )
-                    drawContext.canvas.nativeCanvas.drawCenteredMultilineText(
+                    drawContext.canvas.nativeCanvas.drawXMindRtlMultilineText(
                         lines = graphNode.title.wrapNodeTitle(graphNode.level),
-                        x = center.x,
-                        y = center.y,
+                        rightX = topLeft.x + nodeW - if (graphNode.level == 0) 22f * scale else 12f * scale,
+                        centerY = center.y,
                         color = graphNode.textColor.toArgb(),
                         textSize = nodeTextSize,
                         bold = graphNode.level <= 1
@@ -752,6 +753,8 @@ private fun buildXMindGraph(
         palette = palette,
         graphNodes = graphNodes,
         lines = lines,
+        centerWidth = centerWidth,
+        centerHeight = centerHeight,
         pixelScale = pixelScale
     )
     layoutXMindRootSide(
@@ -763,6 +766,8 @@ private fun buildXMindGraph(
         palette = palette,
         graphNodes = graphNodes,
         lines = lines,
+        centerWidth = centerWidth,
+        centerHeight = centerHeight,
         pixelScale = pixelScale
     )
 
@@ -778,10 +783,12 @@ private fun layoutXMindRootSide(
     palette: List<Color>,
     graphNodes: MutableList<GraphNode>,
     lines: MutableList<GraphLine>,
+    centerWidth: Float,
+    centerHeight: Float,
     pixelScale: Float
 ) {
     if (roots.isEmpty()) return
-    val rootDistance = 560f * pixelScale
+    val rootDistance = (centerWidth / 2f) + 430f * pixelScale
     val rootGap = 150f * pixelScale
     val totalHeight = roots.sumOf { branchBlockHeight(it, 1, children, pixelScale).toDouble() }.toFloat() +
         (roots.size - 1).coerceAtLeast(0) * rootGap
@@ -807,7 +814,7 @@ private fun layoutXMindRootSide(
             side = side,
             selected = selectedNodeId == root.id
         )
-        addGraphLine(lines, Offset.Zero, nodeWidth("", 0, pixelScale), nodeHeight("", 0, pixelScale), position, width, height, color)
+        addGraphLine(lines, Offset.Zero, centerWidth, centerHeight, position, width, height, color)
 
         layoutXMindChildren(
             parent = root,
@@ -961,30 +968,30 @@ private fun subtreeLeafCount(node: MindMapNode, children: Map<Long?, List<MindMa
 private fun nodeWidth(title: String, level: Int, pixelScale: Float): Float {
     val lines = title.wrapNodeTitle(level)
     val longest = lines.maxOfOrNull { it.length } ?: 8
-    // عرض گره مثل XMind بر اساس متن بزرگ می‌شود؛ دیگر متن بعد از دو کلمه نمی‌شکند.
+    // XMind-style: width follows the longest readable line; padding is balanced and not too wide.
     val charWidth = when (level) {
-        0 -> 8.9f
-        1 -> 7.6f
-        2 -> 7.0f
-        else -> 6.5f
+        0 -> 13.8f
+        1 -> 7.7f
+        2 -> 7.1f
+        else -> 6.7f
     }
     val horizontalPadding = when (level) {
-        0 -> 40f
-        1 -> 34f
-        2 -> 30f
-        else -> 26f
+        0 -> 88f
+        1 -> 26f
+        2 -> 23f
+        else -> 20f
     }
     val minWidth = when (level) {
-        0 -> 118f
+        0 -> 220f
         1 -> 92f
         2 -> 82f
-        else -> 72f
+        else -> 74f
     }
     val maxWidth = when (level) {
-        0 -> 310f
-        1 -> 285f
-        2 -> 250f
-        else -> 225f
+        0 -> 760f
+        1 -> 390f
+        2 -> 340f
+        else -> 300f
     }
     return ((longest * charWidth + horizontalPadding).coerceIn(minWidth, maxWidth)) * pixelScale
 }
@@ -992,24 +999,24 @@ private fun nodeWidth(title: String, level: Int, pixelScale: Float): Float {
 private fun nodeHeight(title: String, level: Int, pixelScale: Float): Float {
     val lines = title.wrapNodeTitle(level).size.coerceAtLeast(1)
     val lineHeight = when (level) {
-        0 -> 15.8f
-        1 -> 13.1f
-        2 -> 12.0f
-        else -> 11.2f
+        0 -> 25.5f
+        1 -> 14.4f
+        2 -> 13.1f
+        else -> 12.2f
     }
-    // Padding بالا/پایین بیشتر و چپ/راست متعادل‌تر شد تا کارت‌ها کشیده و شیک باشند.
+    // نود مرکزی باید بزرگ، خوانا و شبیه عنوان پروژه باشد؛ حدود دو برابر نودهای دیگر.
     val verticalPadding = when (level) {
-        0 -> 22f
-        1 -> 18f
-        2 -> 16f
-        else -> 14f
+        0 -> 56f
+        1 -> 22f
+        2 -> 19f
+        else -> 17f
     }
     return ((verticalPadding + lines * lineHeight).coerceAtLeast(
         when (level) {
-            0 -> 44f
-            1 -> 34f
-            2 -> 30f
-            else -> 27f
+            0 -> 96f
+            1 -> 40f
+            2 -> 35f
+            else -> 31f
         }
     )) * pixelScale
 }
@@ -1039,14 +1046,19 @@ private fun Offset.normalizedOr(fallback: Offset): Offset {
 }
 
 private fun String.wrapNodeTitle(level: Int): List<String> {
-    // قانون جدید: متن شبیه XMind تا حدود ۶ کلمه در هر خط می‌ماند.
-    // دیگر دوکلمه‌دوکلمه زیر هم نمی‌آید، مگر اینکه جمله خیلی طولانی باشد.
-    val maxWordsPerLine = 6
+    // XMind-style wrapping: keep a readable sentence in each line and wrap around 6-8 words,
+    // not two words per line. Persian/RTL text stays complete and inside the node.
+    val maxWordsPerLine = when (level) {
+        0 -> 8
+        1 -> 8
+        2 -> 7
+        else -> 6
+    }
     val maxCharsPerLine = when (level) {
-        0 -> 46
-        1 -> 42
-        2 -> 38
-        else -> 34
+        0 -> 58
+        1 -> 54
+        2 -> 48
+        else -> 42
     }
     val words = trim().toPersianDigits().split(Regex("\\s+")).filter { it.isNotBlank() }
     if (words.isEmpty()) return listOf("بدون عنوان")
@@ -1063,8 +1075,8 @@ private fun String.wrapNodeTitle(level: Int): List<String> {
     }
 
     words.forEach { rawWord ->
-        val wordParts = if (rawWord.length > maxCharsPerLine) rawWord.chunked(maxCharsPerLine) else listOf(rawWord)
-        wordParts.forEach { word ->
+        val parts = if (rawWord.length > maxCharsPerLine) rawWord.chunked(maxCharsPerLine) else listOf(rawWord)
+        parts.forEach { word ->
             if (currentWords.isEmpty()) {
                 currentWords += word
             } else {
@@ -1082,10 +1094,10 @@ private fun String.wrapNodeTitle(level: Int): List<String> {
     return lines
 }
 
-private fun android.graphics.Canvas.drawCenteredMultilineText(
+private fun android.graphics.Canvas.drawXMindRtlMultilineText(
     lines: List<String>,
-    x: Float,
-    y: Float,
+    rightX: Float,
+    centerY: Float,
     color: Int,
     textSize: Float,
     bold: Boolean
@@ -1093,14 +1105,14 @@ private fun android.graphics.Canvas.drawCenteredMultilineText(
     val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         this.color = color
         this.textSize = textSize
-        textAlign = Paint.Align.CENTER
+        textAlign = Paint.Align.RIGHT
         isFakeBoldText = bold
     }
-    val lineHeight = (paint.descent() - paint.ascent()) * 1.08f
+    val lineHeight = (paint.descent() - paint.ascent()) * 1.15f
     val totalHeight = lineHeight * lines.size
-    var baseline = y - totalHeight / 2f - paint.ascent()
+    var baseline = centerY - totalHeight / 2f - paint.ascent()
     lines.forEach { line ->
-        drawText(line, x, baseline, paint)
+        drawText(line, rightX, baseline, paint)
         baseline += lineHeight
     }
 }
