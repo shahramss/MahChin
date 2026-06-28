@@ -539,14 +539,8 @@ private fun XMindLikeCanvasCard(
                     val textSize = graphNode.fontSize * pixelScale * scale
                     val horizontalPadding = graphNode.horizontalPadding * pixelScale * scale
                     val verticalPadding = graphNode.verticalPadding * pixelScale * scale
-                    drawContext.canvas.nativeCanvas.save()
-                    // فقط کلیپ متن اصلاح شد؛ فاصله داخلی نودها تغییر نکرده است.
-                    drawContext.canvas.nativeCanvas.clipRect(
-                        topLeft.x + 2f * scale,
-                        topLeft.y + 2f * scale,
-                        topLeft.x + nodeW - 2f * scale,
-                        topLeft.y + nodeH - 2f * scale
-                    )
+                    // متن دیگر کلیپ نمی‌شود؛ خود نود بر اساس تعداد خطوط متن اندازه می‌گیرد.
+                    // فاصله داخلی نودها تغییر نکرده است.
                     drawContext.canvas.nativeCanvas.drawXMindRtlMultilineText(
                         lines = graphNode.title.wrapNodeTitle(graphNode.level),
                         x = if (graphNode.level == 0) center.x else topLeft.x + nodeW - horizontalPadding,
@@ -557,7 +551,6 @@ private fun XMindLikeCanvasCard(
                         bold = graphNode.level <= 1,
                         align = if (graphNode.level == 0) Paint.Align.CENTER else Paint.Align.RIGHT
                     )
-                    drawContext.canvas.nativeCanvas.restore()
                 }
             }
 
@@ -964,13 +957,15 @@ private fun android.graphics.Canvas.drawXMindRtlMultilineText(
         isFakeBoldText = bold
     }
     val fm = paint.fontMetrics
-    val rawLineHeight = (fm.descent - fm.ascent) * 1.28f
-    val contentHeight = rawLineHeight * lines.size
-    val available = (bottom - top).coerceAtLeast(rawLineHeight)
-    var baseline = top + (available - contentHeight).coerceAtLeast(0f) / 2f - fm.ascent
+    // از top/bottom واقعی فونت استفاده می‌کنیم تا بالای حروف فارسی در خط اول بریده نشود.
+    val glyphHeight = fm.bottom - fm.top
+    val lineHeight = glyphHeight * 1.08f
+    val contentHeight = glyphHeight + (lines.size - 1).coerceAtLeast(0) * lineHeight
+    val available = (bottom - top).coerceAtLeast(contentHeight)
+    var baseline = top + (available - contentHeight).coerceAtLeast(0f) / 2f - fm.top
     lines.forEach { line ->
         drawText(line, x, baseline, paint)
-        baseline += rawLineHeight
+        baseline += lineHeight
     }
 }
 
