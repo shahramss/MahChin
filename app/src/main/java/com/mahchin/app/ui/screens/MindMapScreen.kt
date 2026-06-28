@@ -122,7 +122,7 @@ fun MindMapScreen(vm: MainViewModel) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text("مایندمپ", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text(
-                        "فضای آزاد شبیه XMind؛ بکش، زوم کن، بعد شاخه بساز.",
+                        "چیدمان منظم شبیه XMind؛ هر شاخه به اندازه زیرشاخه‌هایش فضا می‌گیرد.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -374,7 +374,7 @@ private fun XMindLikeCanvasCard(
     val onSurface = MaterialTheme.colorScheme.onSurface
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
     val density = LocalDensity.current
-    var scale by remember { mutableFloatStateOf(0.48f) }
+    var scale by remember { mutableFloatStateOf(0.38f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
     var dragPositions by remember { mutableStateOf<Map<Long, Offset>>(emptyMap()) }
 
@@ -433,7 +433,7 @@ private fun XMindLikeCanvasCard(
                     .pointerInput(Unit) {
                         detectTransformGestures { _, panChange, zoomChange, _ ->
                             pan += panChange
-                            scale = (scale * zoomChange).coerceIn(0.12f, 2.6f)
+                            scale = (scale * zoomChange).coerceIn(0.07f, 2.8f)
                         }
                     }
                     .pointerInput(graph, scale, pan) {
@@ -601,9 +601,9 @@ private fun XMindLikeCanvasCard(
                     .padding(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                TextButton(onClick = { scale = 0.48f; pan = Offset.Zero }) { Text("مرکز") }
-                TextButton(onClick = { scale = (scale * 1.15f).coerceAtMost(2.6f) }) { Text("+") }
-                TextButton(onClick = { scale = (scale / 1.15f).coerceAtLeast(0.12f) }) { Text("−") }
+                TextButton(onClick = { scale = 0.38f; pan = Offset.Zero }) { Text("مرکز") }
+                TextButton(onClick = { scale = (scale * 1.15f).coerceAtMost(2.8f) }) { Text("+") }
+                TextButton(onClick = { scale = (scale / 1.15f).coerceAtLeast(0.07f) }) { Text("−") }
             }
 
             if (nodes.isEmpty()) {
@@ -706,10 +706,10 @@ private fun buildXMindGraph(
     val graphNodes = mutableListOf<GraphNode>()
     val lines = mutableListOf<GraphLine>()
     val palette = listOf(
-        Color(0xFF00C2FF),
         Color(0xFFFF4D8D),
-        Color(0xFF7C3AED),
+        Color(0xFF00C2FF),
         Color(0xFFFFB020),
+        Color(0xFF7C3AED),
         Color(0xFF22C55E),
         Color(0xFFFF5C35),
         Color(0xFF14B8A6),
@@ -720,12 +720,14 @@ private fun buildXMindGraph(
         Color(0xFFA3E635)
     )
 
+    val centerWidth = nodeWidth(projectTitle, 0, pixelScale)
+    val centerHeight = nodeHeight(projectTitle, 0, pixelScale)
     graphNodes += GraphNode(
         node = null,
         title = projectTitle.ifBlank { "پروژه" },
         center = Offset.Zero,
-        width = nodeWidth(projectTitle, 0, pixelScale),
-        height = nodeHeight(projectTitle, 0, pixelScale),
+        width = centerWidth,
+        height = centerHeight,
         color = primary,
         textColor = Color.Black,
         level = 0,
@@ -736,136 +738,218 @@ private fun buildXMindGraph(
     val roots = children[null].orEmpty().sortedWith(compareBy({ it.orderIndex }, { it.createdAt }))
     if (roots.isEmpty()) return MindGraphLayout(graphNodes, lines)
 
-    val radiusX = 660f * pixelScale
-    val radiusY = 500f * pixelScale
+    // شبیه XMind: شاخه‌ها دو طرف مرکز پخش می‌شوند و هر شاخه بر اساس تعداد زیرشاخه‌ها فضای عمودی خودش را می‌گیرد.
+    val rightRoots = roots.filterIndexed { index, _ -> index % 2 == 0 }
+    val leftRoots = roots.filterIndexed { index, _ -> index % 2 != 0 }
+
+    layoutXMindRootSide(
+        roots = rightRoots,
+        side = 1,
+        sideColorOffset = 0,
+        children = children,
+        selectedNodeId = selectedNodeId,
+        palette = palette,
+        graphNodes = graphNodes,
+        lines = lines,
+        pixelScale = pixelScale
+    )
+    layoutXMindRootSide(
+        roots = leftRoots,
+        side = -1,
+        sideColorOffset = 1,
+        children = children,
+        selectedNodeId = selectedNodeId,
+        palette = palette,
+        graphNodes = graphNodes,
+        lines = lines,
+        pixelScale = pixelScale
+    )
+
+    return MindGraphLayout(graphNodes, lines)
+}
+
+private fun layoutXMindRootSide(
+    roots: List<MindMapNode>,
+    side: Int,
+    sideColorOffset: Int,
+    children: Map<Long?, List<MindMapNode>>,
+    selectedNodeId: Long?,
+    palette: List<Color>,
+    graphNodes: MutableList<GraphNode>,
+    lines: MutableList<GraphLine>,
+    pixelScale: Float
+) {
+    if (roots.isEmpty()) return
+    val rootDistance = 560f * pixelScale
+    val rootGap = 150f * pixelScale
+    val totalHeight = roots.sumOf { branchBlockHeight(it, 1, children, pixelScale).toDouble() }.toFloat() +
+        (roots.size - 1).coerceAtLeast(0) * rootGap
+    var cursor = -totalHeight / 2f
+
     roots.forEachIndexed { index, root ->
-        // ساعت‌گرد: از بالای صفحه شروع می‌شود و ریشه‌ها دور پروژه می‌چرخند.
-        val angle = ((-90f + (360f / roots.size) * index) * Math.PI / 180.0).toFloat()
-        val color = palette[index % palette.size]
-        val dir = Offset(cos(angle), sin(angle))
-        val autoRootPosition = Offset(dir.x * radiusX, dir.y * radiusY)
-        val rootPosition = if (root.x != null && root.y != null) Offset(root.x, root.y) else autoRootPosition
-        val actualDir = rootPosition.normalizedOr(dir)
-        val actualAngle = atan2(actualDir.y, actualDir.x)
+        val blockHeight = branchBlockHeight(root, 1, children, pixelScale)
+        val color = palette[(index * 2 + sideColorOffset) % palette.size]
         val width = nodeWidth(root.title, 1, pixelScale)
         val height = nodeHeight(root.title, 1, pixelScale)
+        val autoPosition = Offset(side * rootDistance, cursor + blockHeight / 2f)
+        val position = if (root.x != null && root.y != null) Offset(root.x, root.y) else autoPosition
+
         graphNodes += GraphNode(
             node = root,
             title = root.title,
-            center = rootPosition,
+            center = position,
             width = width,
             height = height,
             color = color,
             textColor = Color.Black,
             level = 1,
-            side = if (actualDir.x >= 0f) 1 else -1,
+            side = side,
             selected = selectedNodeId == root.id
         )
-        lines += GraphLine(
-            from = Offset.Zero,
-            to = rootPosition - actualDir * (width / 2f),
-            color = color,
-            side = if (actualDir.x >= 0f) 1 else -1,
-            angle = actualAngle
-        )
-        layoutClockwiseChildren(
+        addGraphLine(lines, Offset.Zero, nodeWidth("", 0, pixelScale), nodeHeight("", 0, pixelScale), position, width, height, color)
+
+        layoutXMindChildren(
             parent = root,
-            parentPosition = rootPosition,
+            parentPosition = position,
             parentWidth = width,
-            angle = actualAngle,
+            parentHeight = height,
+            side = side,
             level = 2,
             children = children,
             branchColor = color,
             selectedNodeId = selectedNodeId,
             graphNodes = graphNodes,
             lines = lines,
-            onSurface = onSurface,
             pixelScale = pixelScale
         )
+        cursor += blockHeight + rootGap
     }
-    val resolvedNodes = resolveGraphOverlaps(graphNodes, pixelScale)
-    return MindGraphLayout(resolvedNodes, rebuildGraphLines(resolvedNodes, primary))
 }
 
-private fun layoutClockwiseChildren(
+private fun layoutXMindChildren(
     parent: MindMapNode,
     parentPosition: Offset,
     parentWidth: Float,
-    angle: Float,
+    parentHeight: Float,
+    side: Int,
     level: Int,
     children: Map<Long?, List<MindMapNode>>,
     branchColor: Color,
     selectedNodeId: Long?,
     graphNodes: MutableList<GraphNode>,
     lines: MutableList<GraphLine>,
-    onSurface: Color,
     pixelScale: Float
 ) {
     val directChildren = children[parent.id].orEmpty().sortedWith(compareBy({ it.orderIndex }, { it.createdAt }))
     if (directChildren.isEmpty()) return
 
-    val radial = Offset(cos(angle), sin(angle))
-    val perpendicular = Offset(-sin(angle), cos(angle))
-    val leafSpacing = when (level) {
-        2 -> 240f * pixelScale
-        3 -> 215f * pixelScale
-        else -> 190f * pixelScale
-    }
-    val totalLeaves = directChildren.sumOf { subtreeLeafCount(it, children).coerceAtLeast(1) }
-    var cursor = -(totalLeaves * leafSpacing) / 2f
+    val verticalGap = branchVerticalGap(level, pixelScale)
+    val totalHeight = directChildren.sumOf { branchBlockHeight(it, level, children, pixelScale).toDouble() }.toFloat() +
+        (directChildren.size - 1).coerceAtLeast(0) * verticalGap
+    var cursor = parentPosition.y - totalHeight / 2f
+    val childX = parentPosition.x + side * branchHorizontalDistance(level, pixelScale)
 
     directChildren.forEach { child ->
-        val leaves = subtreeLeafCount(child, children).coerceAtLeast(1)
-        val blockHeight = leaves * leafSpacing
-        val tangentOffset = cursor + blockHeight / 2f
+        val blockHeight = branchBlockHeight(child, level, children, pixelScale)
         val width = nodeWidth(child.title, level, pixelScale)
         val height = nodeHeight(child.title, level, pixelScale)
-        val distance = when (level) {
-            2 -> 470f * pixelScale
-            3 -> 405f * pixelScale
-            else -> 360f * pixelScale
-        }
-        val autoPos = parentPosition + radial * distance + perpendicular * tangentOffset
-        val pos = if (child.x != null && child.y != null) Offset(child.x, child.y) else autoPos
-        val color = branchColor.copy(alpha = when (level) { 2 -> 0.92f; 3 -> 0.80f; else -> 0.72f })
-        val textColor = Color.Black
+        val autoPosition = Offset(childX, cursor + blockHeight / 2f)
+        val position = if (child.x != null && child.y != null) Offset(child.x, child.y) else autoPosition
+        val color = branchColor.copy(alpha = when (level) { 2 -> 0.95f; 3 -> 0.86f; else -> 0.78f })
+
         graphNodes += GraphNode(
             node = child,
             title = child.title,
-            center = pos,
+            center = position,
             width = width,
             height = height,
             color = color,
-            textColor = textColor,
+            textColor = Color.Black,
             level = level,
-            side = if (radial.x >= 0f) 1 else -1,
+            side = side,
             selected = selectedNodeId == child.id
         )
-        val lineDir = (pos - parentPosition).normalizedOr(radial)
-        val lineAngle = atan2(lineDir.y, lineDir.x)
-        lines += GraphLine(
-            from = parentPosition + lineDir * (parentWidth / 2f),
-            to = pos - lineDir * (width / 2f),
-            color = branchColor,
-            side = if (lineDir.x >= 0f) 1 else -1,
-            angle = lineAngle
-        )
-        layoutClockwiseChildren(
+        addGraphLine(lines, parentPosition, parentWidth, parentHeight, position, width, height, branchColor)
+
+        layoutXMindChildren(
             parent = child,
-            parentPosition = pos,
+            parentPosition = position,
             parentWidth = width,
-            angle = angle,
+            parentHeight = height,
+            side = side,
             level = level + 1,
             children = children,
             branchColor = branchColor,
             selectedNodeId = selectedNodeId,
             graphNodes = graphNodes,
             lines = lines,
-            onSurface = onSurface,
             pixelScale = pixelScale
         )
-        cursor += blockHeight
+        cursor += blockHeight + verticalGap
     }
+}
+
+private fun branchBlockHeight(
+    node: MindMapNode,
+    level: Int,
+    children: Map<Long?, List<MindMapNode>>,
+    pixelScale: Float
+): Float {
+    val nodeOwnHeight = nodeHeight(node.title, level, pixelScale)
+    val directChildren = children[node.id].orEmpty().filter { it.isActive }
+    if (directChildren.isEmpty()) return nodeOwnHeight
+    val gap = branchVerticalGap(level + 1, pixelScale)
+    val childrenHeight = directChildren.sumOf { branchBlockHeight(it, level + 1, children, pixelScale).toDouble() }.toFloat() +
+        (directChildren.size - 1).coerceAtLeast(0) * gap
+    return max(nodeOwnHeight, childrenHeight)
+}
+
+private fun branchVerticalGap(level: Int, pixelScale: Float): Float {
+    return when (level) {
+        1 -> 120f
+        2 -> 95f
+        3 -> 80f
+        else -> 68f
+    } * pixelScale
+}
+
+private fun branchHorizontalDistance(level: Int, pixelScale: Float): Float {
+    return when (level) {
+        2 -> 470f
+        3 -> 390f
+        4 -> 340f
+        else -> 310f
+    } * pixelScale
+}
+
+private fun addGraphLine(
+    lines: MutableList<GraphLine>,
+    fromCenter: Offset,
+    fromWidth: Float,
+    fromHeight: Float,
+    toCenter: Offset,
+    toWidth: Float,
+    toHeight: Float,
+    color: Color
+) {
+    val direction = (toCenter - fromCenter).normalizedOr(Offset(1f, 0f))
+    val start = edgePoint(fromCenter, fromWidth, fromHeight, toCenter)
+    val end = edgePoint(toCenter, toWidth, toHeight, fromCenter)
+    lines += GraphLine(
+        from = start,
+        to = end,
+        color = color,
+        side = if (direction.x >= 0f) 1 else -1,
+        angle = atan2(direction.y, direction.x)
+    )
+}
+
+private fun edgePoint(center: Offset, width: Float, height: Float, toward: Offset): Offset {
+    val direction = (toward - center).normalizedOr(Offset(1f, 0f))
+    val tx = if (abs(direction.x) < 0.001f) Float.MAX_VALUE else (width / 2f) / abs(direction.x)
+    val ty = if (abs(direction.y) < 0.001f) Float.MAX_VALUE else (height / 2f) / abs(direction.y)
+    val t = min(tx, ty)
+    return center + direction * t
 }
 
 private fun subtreeLeafCount(node: MindMapNode, children: Map<Long?, List<MindMapNode>>): Int {
@@ -873,85 +957,32 @@ private fun subtreeLeafCount(node: MindMapNode, children: Map<Long?, List<MindMa
     return if (list.isEmpty()) 1 else list.sumOf { subtreeLeafCount(it, children) }
 }
 
-
-private fun resolveGraphOverlaps(nodes: List<GraphNode>, pixelScale: Float): List<GraphNode> {
-    if (nodes.size <= 2) return nodes
-    val fixed = nodes.toMutableList()
-    val centerIndex = fixed.indexOfFirst { it.node == null }
-    val minGap = 72f * pixelScale
-    repeat(10) {
-        var changed = false
-        for (i in fixed.indices) {
-            for (j in i + 1 until fixed.size) {
-                if (i == centerIndex || j == centerIndex) continue
-                val a = fixed[i]
-                val b = fixed[j]
-                val dx = b.center.x - a.center.x
-                val dy = b.center.y - a.center.y
-                val overlapX = (a.width + b.width) / 2f + minGap - kotlin.math.abs(dx)
-                val overlapY = (a.height + b.height) / 2f + minGap - kotlin.math.abs(dy)
-                if (overlapX > 0f && overlapY > 0f) {
-                    val moveX = if (dx >= 0f) overlapX / 2f else -overlapX / 2f
-                    val moveY = if (dy >= 0f) overlapY / 2f else -overlapY / 2f
-                    fixed[i] = a.copy(center = Offset(a.center.x - moveX, a.center.y - moveY))
-                    fixed[j] = b.copy(center = Offset(b.center.x + moveX, b.center.y + moveY))
-                    changed = true
-                }
-            }
-        }
-        if (!changed) return fixed
-    }
-    return fixed
-}
-
-private fun rebuildGraphLines(nodes: List<GraphNode>, primary: Color): List<GraphLine> {
-    val nodeById = nodes.mapNotNull { graphNode -> graphNode.node?.id?.let { it to graphNode } }.toMap()
-    val center = nodes.firstOrNull { it.node == null }
-    return nodes.mapNotNull { child ->
-        val node = child.node ?: return@mapNotNull null
-        val parent = node.parentId?.let { nodeById[it] } ?: center ?: return@mapNotNull null
-        val from = parent.center
-        val to = child.center
-        val direction = (to - from).normalizedOr(Offset(1f, 0f))
-        val start = from + direction * (parent.width / 2f)
-        val end = to - direction * (child.width / 2f)
-        val color = if (parent.node == null) child.color else parent.color
-        GraphLine(
-            from = start,
-            to = end,
-            color = color,
-            side = if (direction.x >= 0f) 1 else -1,
-            angle = atan2(direction.y, direction.x)
-        )
-    }
-}
-
 private fun nodeWidth(title: String, level: Int, pixelScale: Float): Float {
     val lines = title.wrapNodeTitle(level)
     val longest = lines.maxOfOrNull { it.length } ?: 8
     val charWidth = when (level) {
-        0 -> 9.9f
-        1 -> 8.7f
-        2 -> 8.0f
-        else -> 7.5f
+        0 -> 9.1f
+        1 -> 8.2f
+        2 -> 7.6f
+        else -> 7.1f
     }
     val horizontalPadding = when (level) {
-        0 -> 34f
-        1 -> 28f
-        2 -> 26f
-        else -> 24f
+        0 -> 24f
+        1 -> 22f
+        2 -> 20f
+        else -> 18f
     }
     val minWidth = when (level) {
-        0 -> 112f
-        1 -> 98f
-        2 -> 90f
-        else -> 84f
+        0 -> 108f
+        1 -> 96f
+        2 -> 88f
+        else -> 82f
     }
     val maxWidth = when (level) {
-        0 -> 190f
-        1 -> 162f
-        2 -> 148f
-        else -> 138f
+        0 -> 178f
+        1 -> 156f
+        2 -> 142f
+        else -> 132f
     }
     return ((longest * charWidth + horizontalPadding).coerceIn(minWidth, maxWidth)) * pixelScale
 }
@@ -959,23 +990,23 @@ private fun nodeWidth(title: String, level: Int, pixelScale: Float): Float {
 private fun nodeHeight(title: String, level: Int, pixelScale: Float): Float {
     val lines = title.wrapNodeTitle(level).size.coerceAtLeast(1)
     val lineHeight = when (level) {
-        0 -> 16.5f
-        1 -> 14.8f
-        2 -> 13.8f
-        else -> 13.0f
+        0 -> 15.6f
+        1 -> 14.3f
+        2 -> 13.3f
+        else -> 12.6f
     }
     val verticalPadding = when (level) {
-        0 -> 38f
-        1 -> 34f
-        2 -> 32f
-        else -> 30f
+        0 -> 34f
+        1 -> 31f
+        2 -> 29f
+        else -> 27f
     }
     return ((verticalPadding + lines * lineHeight).coerceAtLeast(
         when (level) {
-            0 -> 58f
-            1 -> 52f
-            2 -> 48f
-            else -> 44f
+            0 -> 56f
+            1 -> 50f
+            2 -> 46f
+            else -> 42f
         }
     )) * pixelScale
 }
