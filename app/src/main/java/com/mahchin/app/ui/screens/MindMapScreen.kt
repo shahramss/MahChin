@@ -542,9 +542,9 @@ private fun XMindLikeCanvasCard(
                     drawContext.canvas.nativeCanvas.save()
                     drawContext.canvas.nativeCanvas.clipRect(
                         topLeft.x + horizontalPadding,
-                        topLeft.y + verticalPadding,
+                        topLeft.y + 2f * scale,
                         topLeft.x + nodeW - horizontalPadding,
-                        topLeft.y + nodeH - verticalPadding
+                        topLeft.y + nodeH - 2f * scale
                     )
                     drawContext.canvas.nativeCanvas.drawXMindRtlMultilineText(
                         lines = graphNode.title.wrapNodeTitle(graphNode.level),
@@ -562,8 +562,9 @@ private fun XMindLikeCanvasCard(
             Column(
                 modifier = Modifier
                     .align(Alignment.TopStart)
+                    .fillMaxWidth()
                     .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
                 Text(
                     "فضای آزاد مایندمپ",
@@ -576,26 +577,37 @@ private fun XMindLikeCanvasCard(
                     color = onSurfaceVariant.copy(alpha = 0.82f),
                     style = MaterialTheme.typography.labelSmall
                 )
-            }
-
-            if (selectedNodeId != null) {
-                val selected = nodes.firstOrNull { it.id == selectedNodeId }
+                val selected = selectedNodeId?.let { id -> nodes.firstOrNull { it.id == id } }
                 if (selected != null) {
                     Card(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(18.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF082F31).copy(alpha = 0.96f)),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.46f)),
+                        elevation = CardDefaults.cardElevation(0.dp)
                     ) {
-                        Text(
-                            "انتخاب: ${selected.title.toPersianDigits()}",
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            color = MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Column(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Text(
+                                "انتخاب: ${selected.title.toPersianDigits()}",
+                                color = MaterialTheme.colorScheme.primary,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 2,
+                                overflow = TextOverflow.Clip
+                            )
+                            if (selected.description.isNotBlank()) {
+                                Text(
+                                    selected.description.toPersianDigits(),
+                                    color = onSurfaceVariant.copy(alpha = 0.82f),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Clip
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -915,7 +927,7 @@ private fun nodeHeight(title: String, level: Int, pixelScale: Float): Float {
     val lines = title.wrapNodeTitle(level).size.coerceAtLeast(1)
     val style = nodeStyle(level)
     val minHeight = when (level) { 0 -> 106f; 1 -> 78f; 2 -> 62f; else -> 52f }
-    return (lines * style.fontSize * 1.34f + style.verticalPadding * 2f).coerceAtLeast(minHeight) * pixelScale
+    return (lines * style.fontSize * 1.46f + style.verticalPadding * 2.4f).coerceAtLeast(minHeight) * pixelScale
 }
 
 private fun GraphNode.hit(point: Offset): Boolean {
@@ -979,7 +991,7 @@ private fun android.graphics.Canvas.drawXMindRtlMultilineText(
         textAlign = align
         isFakeBoldText = bold
     }
-    val lineHeight = (paint.descent() - paint.ascent()) * 1.12f
+    val lineHeight = (paint.descent() - paint.ascent()) * 1.20f
     val totalHeight = lineHeight * lines.size
     var baseline = centerY - totalHeight / 2f - paint.ascent()
     lines.forEach { line ->
