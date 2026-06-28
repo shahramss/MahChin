@@ -724,9 +724,18 @@ private fun buildXMindGraph(
     val graphNodes = mutableListOf<GraphNode>()
 
     val palette = listOf(
-        Color(0xFFFFB3B3), Color(0xFFFFC89A), Color(0xFFFFD97D), Color(0xFFB8F2D6),
-        Color(0xFF88E7E0), Color(0xFFA9D5FF), Color(0xFFC7B8FF), Color(0xFFFFB6D5),
-        Color(0xFFD7C6FF), Color(0xFFB6E8C8), Color(0xFFFFC6AE), Color(0xFFAED9F8)
+        Color(0xFFFF6B6B), Color(0xFFFF8E72), Color(0xFFFFA94D), Color(0xFFFFC857), Color(0xFFF4E04D),
+        Color(0xFFB8DE6F), Color(0xFF7ED957), Color(0xFF4ECDC4), Color(0xFF45B7D1), Color(0xFF5DADE2),
+        Color(0xFF74B9FF), Color(0xFF81ECEC), Color(0xFF55EFC4), Color(0xFFA3F7BF), Color(0xFFC7F464),
+        Color(0xFFFFF176), Color(0xFFFFD166), Color(0xFFFFB347), Color(0xFFFF9AA2), Color(0xFFFFB7B2),
+        Color(0xFFFFDAC1), Color(0xFFE2F0CB), Color(0xFFB5EAD7), Color(0xFFC7CEEA), Color(0xFFE0BBE4),
+        Color(0xFFD291BC), Color(0xFFFEC8D8), Color(0xFFFFDFD3), Color(0xFFA0E7E5), Color(0xFFB4F8C8),
+        Color(0xFFFBE7C6), Color(0xFFFFAEBC), Color(0xFFA0C4FF), Color(0xFFBDB2FF), Color(0xFFFFC6FF),
+        Color(0xFF9BF6FF), Color(0xFFCAFFBF), Color(0xFFFDFFB6), Color(0xFFFFD6A5), Color(0xFFFFADAD),
+        Color(0xFFE4C1F9), Color(0xFFD0F4DE), Color(0xFFA9DEF9), Color(0xFFEDE7B1), Color(0xFFFFC09F),
+        Color(0xFFCBF3F0), Color(0xFF2EC4B6), Color(0xFFFFBF69), Color(0xFFBDE0FE), Color(0xFFA2D2FF),
+        Color(0xFFFFC8DD), Color(0xFFD8E2DC), Color(0xFFFFF1E6), Color(0xFFE5989B), Color(0xFFB5838D),
+        Color(0xFF90DBF4), Color(0xFF98F5E1), Color(0xFFF9C74F), Color(0xFFF9844A), Color(0xFF8EECF5)
     )
 
     val centerStyle = nodeStyle(0)
@@ -881,15 +890,15 @@ private fun layoutChildrenStrictTree(
 private fun branchBlockHeight(node: MindMapNode, level: Int, children: Map<Long?, List<MindMapNode>>, pixelScale: Float): Float {
     val own = nodeHeight(node.title, level, pixelScale)
     val directChildren = children[node.id].orEmpty().filter { it.isActive }
-    if (directChildren.isEmpty()) return own + 10f * pixelScale
+    if (directChildren.isEmpty()) return own + 16f * pixelScale
     val kids = directChildren.sumOf { branchBlockHeight(it, level + 1, children, pixelScale).toDouble() }.toFloat() +
         (directChildren.size - 1).coerceAtLeast(0) * childVerticalGap(level + 1, pixelScale)
-    return max(own, kids) + 14f * pixelScale
+    return max(own, kids) + 22f * pixelScale
 }
 
-private fun rootVerticalGap(pixelScale: Float): Float = 112f * pixelScale
-private fun childVerticalGap(level: Int, pixelScale: Float): Float = (when (level) { 2 -> 62f; 3 -> 48f; else -> 38f }) * pixelScale
-private fun horizontalGap(level: Int, pixelScale: Float): Float = (when (level) { 2 -> 178f; 3 -> 146f; else -> 120f }) * pixelScale
+private fun rootVerticalGap(pixelScale: Float): Float = 150f * pixelScale
+private fun childVerticalGap(level: Int, pixelScale: Float): Float = (when (level) { 2 -> 88f; 3 -> 70f; else -> 54f }) * pixelScale
+private fun horizontalGap(level: Int, pixelScale: Float): Float = (when (level) { 2 -> 214f; 3 -> 174f; else -> 146f }) * pixelScale
 
 private fun addGraphLine(lines: MutableList<GraphLine>, fromCenter: Offset, fromWidth: Float, fromHeight: Float, toCenter: Offset, toWidth: Float, toHeight: Float, color: Color, lineSide: Int) {
     val start = edgePoint(fromCenter, fromWidth, fromHeight, toCenter)
@@ -905,11 +914,8 @@ private fun edgePoint(center: Offset, width: Float, height: Float, toward: Offse
 }
 
 private fun rootFamilyColor(node: MindMapNode, activeNodes: List<MindMapNode>, children: Map<Long?, List<MindMapNode>>, palette: List<Color>): Color {
-    val byId = activeNodes.associateBy { it.id }
-    var cursor = node
-    while (cursor.parentId != null) cursor = byId[cursor.parentId] ?: break
-    val roots = children[null].orEmpty().filter { it.isActive }.sortedWith(compareBy({ it.orderIndex }, { it.createdAt }))
-    val index = roots.indexOfFirst { it.id == cursor.id }.coerceAtLeast(0)
+    val ordered = activeNodes.sortedWith(compareBy({ it.levelHint }, { it.orderIndex }, { it.createdAt }, { it.id ?: 0L }))
+    val index = ordered.indexOfFirst { it.id == node.id }.coerceAtLeast(0)
     return palette[index % palette.size]
 }
 
@@ -918,8 +924,8 @@ private fun nodeWidth(title: String, level: Int, pixelScale: Float): Float {
     val paint = mindMapTextPaint(style.fontSize * pixelScale, level <= 1, Color.Black.toArgb())
     val prepared = title.preparedNodeText(level)
     val longestMeasured = prepared.lines().maxOfOrNull { paint.measureText(it) } ?: paint.measureText("بدون عنوان")
-    val minWidth = when (level) { 0 -> 230f; 1 -> 168f; 2 -> 142f; else -> 122f } * pixelScale
-    val maxWidth = when (level) { 0 -> 620f; 1 -> 520f; 2 -> 430f; else -> 360f } * pixelScale
+    val minWidth = when (level) { 0 -> 250f; 1 -> 190f; 2 -> 164f; else -> 144f } * pixelScale
+    val maxWidth = when (level) { 0 -> 680f; 1 -> 560f; 2 -> 470f; else -> 400f } * pixelScale
     val desired = longestMeasured * 1.05f + style.horizontalPadding * 2f * pixelScale
     return desired.coerceIn(minWidth, maxWidth)
 }
@@ -968,57 +974,7 @@ private fun String.wrapNodeTitle(level: Int): List<String> {
     if (clean.isBlank()) return listOf("بدون عنوان")
     val words = clean.split(" ").filter { it.isNotBlank() }
     if (words.isEmpty()) return listOf("بدون عنوان")
-
-    val maxWordsPerLine = when (level) {
-        0 -> 7
-        1 -> 7
-        2 -> 6
-        else -> 6
-    }
-    val targetLines = when {
-        words.size <= maxWordsPerLine -> 1
-        words.size <= maxWordsPerLine * 2 -> 2
-        else -> 3
-    }
-
-    val totalChars = words.sumOf { it.length } + (words.size - 1)
-    val targetCharsPerLine = (totalChars.toFloat() / targetLines).toInt().coerceAtLeast(8)
-    val lines = mutableListOf<String>()
-    var current = mutableListOf<String>()
-    var currentChars = 0
-
-    fun flush() {
-        if (current.isNotEmpty()) {
-            lines += current.joinToString(" ")
-            current = mutableListOf()
-            currentChars = 0
-        }
-    }
-
-    words.forEachIndexed { index, word ->
-        val additional = if (current.isEmpty()) word.length else word.length + 1
-        val remainingWords = words.size - index
-        val remainingLines = (targetLines - lines.size).coerceAtLeast(1)
-        val forceFlush = current.isNotEmpty() && (
-            current.size >= maxWordsPerLine ||
-            (currentChars + additional > targetCharsPerLine && remainingWords >= remainingLines)
-        )
-        if (forceFlush) flush()
-        current += word
-        currentChars += if (current.size == 1) word.length else word.length + 1
-    }
-    flush()
-
-    if (lines.size >= 2 && lines.last().split(" ").size == 1) {
-        val previousWords = lines[lines.lastIndex - 1].split(" ").toMutableList()
-        if (previousWords.size >= 3) {
-            val moved = previousWords.removeLast()
-            lines[lines.lastIndex - 1] = previousWords.joinToString(" ")
-            lines[lines.lastIndex] = "$moved ${lines.last()}"
-        }
-    }
-
-    return lines.filter { it.isNotBlank() }
+    return words.chunked(7).map { it.joinToString(" ") }
 }
 
 private fun String.preparedNodeText(level: Int): String = wrapNodeTitle(level).joinToString("\n")
