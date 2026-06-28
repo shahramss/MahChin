@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -28,6 +29,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -52,6 +54,7 @@ fun SettingsScreen(vm: MainViewModel) {
     var expanded by remember { mutableStateOf(false) }
     var startHour by remember(settings.startHour) { mutableStateOf(settings.startHour.toString()) }
     var endHour by remember(settings.endHour) { mutableStateOf(settings.endHour.toString()) }
+    var confirmClear by remember { mutableStateOf<String?>(null) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
@@ -149,12 +152,65 @@ fun SettingsScreen(vm: MainViewModel) {
         item { SettingSwitch("بکاپ خودکار اندروید", settings.backupEnabled) { checked -> vm.updateSettings { it.copy(backupEnabled = checked) } } }
 
         item {
+            Card(
+                Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.28f)),
+                elevation = CardDefaults.cardElevation(0.dp)
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("پاک‌سازی داده‌ها", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                    Text("برای جلوگیری از حذف اشتباهی، قبل از پاک کردن از تو تأیید گرفته می‌شود.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    OutlinedButton(onClick = { confirmClear = "today" }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                        Text("پاک کردن تسک‌های امروز")
+                    }
+                    OutlinedButton(onClick = { confirmClear = "templates" }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                        Text("پاک کردن همه تسک‌های قالب")
+                    }
+                    Button(onClick = { confirmClear = "all" }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                        Text("پاک کردن همه تسک‌ها")
+                    }
+                }
+            }
+        }
+
+        item {
             Spacer(Modifier.height(6.dp))
             Text(
                 "برای اینکه یادآوری‌ها در بعضی گوشی‌ها بهتر کار کند، در تنظیمات گوشی Battery Optimization را برای ماه‌چین محدود نکن.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+
+    confirmClear?.let { action ->
+        val title = when (action) {
+            "today" -> "پاک کردن تسک‌های امروز"
+            "templates" -> "پاک کردن تسک‌های قالب"
+            else -> "پاک کردن همه تسک‌ها"
+        }
+        val question = when (action) {
+            "today" -> "آیا می‌خواهید تسک‌های امروز پاک شود؟"
+            "templates" -> "آیا می‌خواهید همه تسک‌های قالب پاک شود؟"
+            else -> "آیا می‌خواهید تمام تسک‌ها پاک شود؟"
+        }
+        AlertDialog(
+            onDismissRequest = { confirmClear = null },
+            title = { Text(title) },
+            text = { Text(question) },
+            confirmButton = {
+                Button(onClick = {
+                    when (action) {
+                        "today" -> vm.clearTodayTasks()
+                        "templates" -> vm.clearAllTemplateTasks()
+                        else -> vm.clearAllTasks()
+                    }
+                    confirmClear = null
+                }) { Text("بله، پاک کن") }
+            },
+            dismissButton = { TextButton(onClick = { confirmClear = null }) { Text("انصراف") } }
+        )
     }
 }
 

@@ -393,6 +393,21 @@ class TaskRepository(private val dao: TaskDao) {
         return result
     }
 
+
+    suspend fun clearTasksForDate(date: JalaliDate) = withContext(Dispatchers.IO) {
+        dao.deleteDailyInstancesForDate(date.year, date.month, date.day)
+        dao.deleteOneTimeTasksForDate(date.year, date.month, date.day)
+    }
+
+    suspend fun clearAllTasks() = withContext(Dispatchers.IO) {
+        dao.deleteAllDailyInstances()
+        dao.deleteAllOneTimeTasks()
+    }
+
+    suspend fun clearAllTemplates() = withContext(Dispatchers.IO) {
+        dao.deactivateAllTemplates(System.currentTimeMillis())
+    }
+
     suspend fun getFutureAlarms(): List<TaskItem> = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         val projects = dao.getProjects().associateBy { it.id }

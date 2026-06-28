@@ -308,6 +308,32 @@ class MainViewModel(
         }
     }
 
+
+    fun clearTodayTasks() {
+        viewModelScope.launch {
+            repository.clearTasksForDate(today)
+            ReminderScheduler.scheduleImmediateCheck(app)
+            _settingsMessage.value = "تسک‌های امروز پاک شد."
+        }
+    }
+
+    fun clearAllTasks() {
+        viewModelScope.launch {
+            repository.clearAllTasks()
+            ReminderScheduler.scheduleImmediateCheck(app)
+            _settingsMessage.value = "همه تسک‌ها پاک شد."
+        }
+    }
+
+    fun clearAllTemplateTasks() {
+        viewModelScope.launch {
+            repository.clearAllTemplates()
+            repository.clearTasksForDate(today)
+            ReminderScheduler.scheduleImmediateCheck(app)
+            _settingsMessage.value = "همه تسک‌های قالب پاک شد."
+        }
+    }
+
     fun saveReminderSettings(startHour: Int, endHour: Int) {
         val start = startHour.coerceIn(0, 23)
         val end = endHour.coerceIn(1, 24).coerceAtLeast((start + 1).coerceAtMost(24))

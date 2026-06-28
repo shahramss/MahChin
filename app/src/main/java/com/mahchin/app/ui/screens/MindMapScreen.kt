@@ -374,7 +374,7 @@ private fun XMindLikeCanvasCard(
     val onSurface = MaterialTheme.colorScheme.onSurface
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
     val density = LocalDensity.current
-    var scale by remember { mutableFloatStateOf(0.68f) }
+    var scale by remember { mutableFloatStateOf(0.48f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
     var dragPositions by remember { mutableStateOf<Map<Long, Offset>>(emptyMap()) }
 
@@ -433,7 +433,7 @@ private fun XMindLikeCanvasCard(
                     .pointerInput(Unit) {
                         detectTransformGestures { _, panChange, zoomChange, _ ->
                             pan += panChange
-                            scale = (scale * zoomChange).coerceIn(0.20f, 2.6f)
+                            scale = (scale * zoomChange).coerceIn(0.12f, 2.6f)
                         }
                     }
                     .pointerInput(graph, scale, pan) {
@@ -499,14 +499,14 @@ private fun XMindLikeCanvasCard(
                     val nodeW = graphNode.width * scale
                     val nodeH = graphNode.height * scale
                     val topLeft = Offset(center.x - nodeW / 2f, center.y - nodeH / 2f)
-                    val radius = CornerRadius(14f * scale, 14f * scale)
+                    val radius = CornerRadius(16f * scale, 16f * scale)
 
                     drawRoundRect(
                         color = graphNode.color.copy(alpha = if (graphNode.selected) 0.22f else 0.12f),
-                        topLeft = topLeft - Offset(5f * scale, 5f * scale),
-                        size = Size(nodeW + 10f * scale, nodeH + 10f * scale),
-                        cornerRadius = CornerRadius(20f * scale, 20f * scale),
-                        style = Stroke(width = if (graphNode.selected) 3.0f * scale else 1.6f * scale)
+                        topLeft = topLeft - Offset(3f * scale, 3f * scale),
+                        size = Size(nodeW + 6f * scale, nodeH + 6f * scale),
+                        cornerRadius = CornerRadius(18f * scale, 18f * scale),
+                        style = Stroke(width = if (graphNode.selected) 2.4f * scale else 1.2f * scale)
                     )
                     val fillColor = when (graphNode.level) {
                         0 -> graphNode.color
@@ -530,17 +530,17 @@ private fun XMindLikeCanvasCard(
                         )
                     }
                     val nodeTextSize = when (graphNode.level) {
-                        0 -> 13.8f
-                        1 -> 11.4f
-                        2 -> 10.6f
-                        else -> 9.8f
+                        0 -> 12.8f
+                        1 -> 10.6f
+                        2 -> 9.8f
+                        else -> 9.2f
                     } * density.density * scale
                     drawContext.canvas.nativeCanvas.save()
                     drawContext.canvas.nativeCanvas.clipRect(
-                        topLeft.x + 8f * scale,
-                        topLeft.y + 6f * scale,
-                        topLeft.x + nodeW - 8f * scale,
-                        topLeft.y + nodeH - 6f * scale
+                        topLeft.x + 10f * scale,
+                        topLeft.y + 10f * scale,
+                        topLeft.x + nodeW - 10f * scale,
+                        topLeft.y + nodeH - 10f * scale
                     )
                     drawContext.canvas.nativeCanvas.drawCenteredMultilineText(
                         lines = graphNode.title.wrapNodeTitle(graphNode.level),
@@ -601,9 +601,9 @@ private fun XMindLikeCanvasCard(
                     .padding(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                TextButton(onClick = { scale = 0.68f; pan = Offset.Zero }) { Text("مرکز") }
+                TextButton(onClick = { scale = 0.48f; pan = Offset.Zero }) { Text("مرکز") }
                 TextButton(onClick = { scale = (scale * 1.15f).coerceAtMost(2.6f) }) { Text("+") }
-                TextButton(onClick = { scale = (scale / 1.15f).coerceAtLeast(0.20f) }) { Text("−") }
+                TextButton(onClick = { scale = (scale / 1.15f).coerceAtLeast(0.12f) }) { Text("−") }
             }
 
             if (nodes.isEmpty()) {
@@ -736,8 +736,8 @@ private fun buildXMindGraph(
     val roots = children[null].orEmpty().sortedWith(compareBy({ it.orderIndex }, { it.createdAt }))
     if (roots.isEmpty()) return MindGraphLayout(graphNodes, lines)
 
-    val radiusX = 420f * pixelScale
-    val radiusY = 320f * pixelScale
+    val radiusX = 660f * pixelScale
+    val radiusY = 500f * pixelScale
     roots.forEachIndexed { index, root ->
         // ساعت‌گرد: از بالای صفحه شروع می‌شود و ریشه‌ها دور پروژه می‌چرخند.
         val angle = ((-90f + (360f / roots.size) * index) * Math.PI / 180.0).toFloat()
@@ -783,7 +783,8 @@ private fun buildXMindGraph(
             pixelScale = pixelScale
         )
     }
-    return MindGraphLayout(graphNodes, lines)
+    val resolvedNodes = resolveGraphOverlaps(graphNodes, pixelScale)
+    return MindGraphLayout(resolvedNodes, rebuildGraphLines(resolvedNodes, primary))
 }
 
 private fun layoutClockwiseChildren(
@@ -806,9 +807,9 @@ private fun layoutClockwiseChildren(
     val radial = Offset(cos(angle), sin(angle))
     val perpendicular = Offset(-sin(angle), cos(angle))
     val leafSpacing = when (level) {
-        2 -> 148f * pixelScale
-        3 -> 132f * pixelScale
-        else -> 118f * pixelScale
+        2 -> 240f * pixelScale
+        3 -> 215f * pixelScale
+        else -> 190f * pixelScale
     }
     val totalLeaves = directChildren.sumOf { subtreeLeafCount(it, children).coerceAtLeast(1) }
     var cursor = -(totalLeaves * leafSpacing) / 2f
@@ -820,9 +821,9 @@ private fun layoutClockwiseChildren(
         val width = nodeWidth(child.title, level, pixelScale)
         val height = nodeHeight(child.title, level, pixelScale)
         val distance = when (level) {
-            2 -> 330f * pixelScale
-            3 -> 285f * pixelScale
-            else -> 250f * pixelScale
+            2 -> 470f * pixelScale
+            3 -> 405f * pixelScale
+            else -> 360f * pixelScale
         }
         val autoPos = parentPosition + radial * distance + perpendicular * tangentOffset
         val pos = if (child.x != null && child.y != null) Offset(child.x, child.y) else autoPos
@@ -876,28 +877,28 @@ private fun nodeWidth(title: String, level: Int, pixelScale: Float): Float {
     val lines = title.wrapNodeTitle(level)
     val longest = lines.maxOfOrNull { it.length } ?: 8
     val charWidth = when (level) {
-        0 -> 10.7f
-        1 -> 9.3f
-        2 -> 8.5f
-        else -> 7.9f
+        0 -> 9.9f
+        1 -> 8.7f
+        2 -> 8.0f
+        else -> 7.5f
     }
     val horizontalPadding = when (level) {
-        0 -> 50f
-        1 -> 42f
-        2 -> 38f
-        else -> 34f
+        0 -> 34f
+        1 -> 28f
+        2 -> 26f
+        else -> 24f
     }
     val minWidth = when (level) {
-        0 -> 118f
-        1 -> 106f
-        2 -> 96f
-        else -> 88f
+        0 -> 112f
+        1 -> 98f
+        2 -> 90f
+        else -> 84f
     }
     val maxWidth = when (level) {
-        0 -> 215f
-        1 -> 190f
-        2 -> 172f
-        else -> 156f
+        0 -> 190f
+        1 -> 162f
+        2 -> 148f
+        else -> 138f
     }
     return ((longest * charWidth + horizontalPadding).coerceIn(minWidth, maxWidth)) * pixelScale
 }
@@ -905,23 +906,23 @@ private fun nodeWidth(title: String, level: Int, pixelScale: Float): Float {
 private fun nodeHeight(title: String, level: Int, pixelScale: Float): Float {
     val lines = title.wrapNodeTitle(level).size.coerceAtLeast(1)
     val lineHeight = when (level) {
-        0 -> 17f
-        1 -> 14.5f
-        2 -> 13.5f
-        else -> 12.5f
+        0 -> 16.5f
+        1 -> 14.8f
+        2 -> 13.8f
+        else -> 13.0f
     }
     val verticalPadding = when (level) {
-        0 -> 24f
-        1 -> 22f
-        2 -> 20f
-        else -> 18f
+        0 -> 38f
+        1 -> 34f
+        2 -> 32f
+        else -> 30f
     }
     return ((verticalPadding + lines * lineHeight).coerceAtLeast(
         when (level) {
-            0 -> 48f
-            1 -> 42f
-            2 -> 38f
-            else -> 34f
+            0 -> 58f
+            1 -> 52f
+            2 -> 48f
+            else -> 44f
         }
     )) * pixelScale
 }
@@ -952,10 +953,10 @@ private fun Offset.normalizedOr(fallback: Offset): Offset {
 
 private fun String.wrapNodeTitle(level: Int): List<String> {
     val maxChars = when (level) {
-        0 -> 15
-        1 -> 14
-        2 -> 13
-        else -> 12
+        0 -> 13
+        1 -> 11
+        2 -> 10
+        else -> 10
     }
     val words = trim().toPersianDigits().split(Regex("\\s+")).filter { it.isNotBlank() }
     if (words.isEmpty()) return listOf("بدون عنوان")
@@ -1149,13 +1150,19 @@ private fun DistributeMindMapDialog(
         title = { Text("تقسیم مایندمپ به تسک") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("زیرشاخه‌های نهایی به ترتیب، زیر پروژه و مسیر شاخه‌ها جمع می‌شوند. روزی چند کار ساخته شود؟")
+                Text("زیرشاخه‌های نهایی زیر پروژه و مسیر شاخه‌ها جمع می‌شوند. می‌توانی همه را در یک روز بسازی یا بین روزها تقسیم کنی.")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     SmallNumberField("سال", year, { year = it }, Modifier.weight(1f))
                     SmallNumberField("ماه", month, { month = it }, Modifier.weight(1f))
                     SmallNumberField("روز", day, { day = it }, Modifier.weight(1f))
                 }
-                SmallNumberField("تعداد تسک در روز", perDay, { perDay = it }, Modifier.fillMaxWidth())
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    SmallNumberField("تعداد تسک در روز", perDay, { perDay = it }, Modifier.weight(1f))
+                    OutlinedButton(
+                        onClick = { perDay = "9999" },
+                        modifier = Modifier.height(56.dp)
+                    ) { Text("همه در یک روز") }
+                }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },

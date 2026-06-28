@@ -133,6 +133,22 @@ interface TaskDao {
     @Query("SELECT * FROM one_time_tasks WHERE jalaliYear = :year AND jalaliMonth = :month ORDER BY jalaliDay ASC")
     suspend fun getOneTimeTasksForMonth(year: Int, month: Int): List<OneTimeTask>
 
+
+    @Query("DELETE FROM daily_task_instances WHERE jalaliYear = :year AND jalaliMonth = :month AND jalaliDay = :day")
+    suspend fun deleteDailyInstancesForDate(year: Int, month: Int, day: Int)
+
+    @Query("DELETE FROM one_time_tasks WHERE jalaliYear = :year AND jalaliMonth = :month AND jalaliDay = :day")
+    suspend fun deleteOneTimeTasksForDate(year: Int, month: Int, day: Int)
+
+    @Query("DELETE FROM daily_task_instances")
+    suspend fun deleteAllDailyInstances()
+
+    @Query("DELETE FROM one_time_tasks")
+    suspend fun deleteAllOneTimeTasks()
+
+    @Query("UPDATE monthly_template_tasks SET isActive = 0, updatedAt = :updatedAt WHERE isActive = 1")
+    suspend fun deactivateAllTemplates(updatedAt: Long = System.currentTimeMillis())
+
     @Query("SELECT * FROM user_settings WHERE id = 1 LIMIT 1")
     fun observeSettings(): Flow<UserSettings?>
 
