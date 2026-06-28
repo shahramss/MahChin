@@ -24,7 +24,7 @@ import com.mahchin.app.data.model.UserSettings
         Project::class,
         MindMapNode::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -37,9 +37,11 @@ abstract class AppDatabase : RoomDatabase() {
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS `projects` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `colorHex` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `isActive` INTEGER NOT NULL)")
-                db.execSQL("CREATE TABLE IF NOT EXISTS `mind_map_nodes` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `projectId` INTEGER NOT NULL, `parentId` INTEGER, `title` TEXT NOT NULL, `description` TEXT NOT NULL, `orderIndex` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `isActive` INTEGER NOT NULL)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `mind_map_nodes` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `projectId` INTEGER NOT NULL, `parentId` INTEGER, `title` TEXT NOT NULL, `description` TEXT NOT NULL, `orderIndex` INTEGER NOT NULL, `x` REAL, `y` REAL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `isActive` INTEGER NOT NULL)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_mind_map_nodes_projectId` ON `mind_map_nodes` (`projectId`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_mind_map_nodes_parentId` ON `mind_map_nodes` (`parentId`)")
+                addColumnIfMissing(db, "mind_map_nodes", "x", "REAL")
+                addColumnIfMissing(db, "mind_map_nodes", "y", "REAL")
                 addColumnIfMissing(db, "daily_task_instances", "projectId", "INTEGER")
                 addColumnIfMissing(db, "daily_task_instances", "sourceMindMapNodeId", "INTEGER")
                 addColumnIfMissing(db, "daily_task_instances", "alarmAtMillis", "INTEGER")
@@ -50,6 +52,13 @@ abstract class AppDatabase : RoomDatabase() {
                 addColumnIfMissing(db, "monthly_template_tasks", "sourceMindMapNodeId", "INTEGER")
                 addColumnIfMissing(db, "monthly_template_tasks", "alarmHour", "INTEGER")
                 addColumnIfMissing(db, "monthly_template_tasks", "alarmMinute", "INTEGER")
+            }
+        }
+
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                addColumnIfMissing(db, "mind_map_nodes", "x", "REAL")
+                addColumnIfMissing(db, "mind_map_nodes", "y", "REAL")
             }
         }
 
@@ -73,7 +82,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "mahchin.db"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also { INSTANCE = it }
             }

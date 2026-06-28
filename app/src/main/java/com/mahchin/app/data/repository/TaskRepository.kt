@@ -84,6 +84,10 @@ class TaskRepository(private val dao: TaskDao) {
         }
     }
 
+    suspend fun updateMindMapNodePosition(id: Long, x: Float, y: Float) = withContext(Dispatchers.IO) {
+        dao.updateMindMapNodePosition(id, x, y, System.currentTimeMillis())
+    }
+
     suspend fun deleteMindMapNode(id: Long) = withContext(Dispatchers.IO) {
         val node = dao.getMindMapNode(id) ?: return@withContext
         val allProjectNodes = dao.getMindMapNodes(node.projectId)

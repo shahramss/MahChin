@@ -153,6 +153,10 @@ class MainViewModel(
         viewModelScope.launch { repository.deleteMindMapNode(id) }
     }
 
+    fun moveMindMapNode(id: Long, x: Float, y: Float) {
+        viewModelScope.launch { repository.updateMindMapNodePosition(id, x, y) }
+    }
+
     fun makeTasksFromMindMap(startDate: JalaliDate, tasksPerDay: Int) {
         val projectId = _selectedProjectId.value ?: return
         viewModelScope.launch {

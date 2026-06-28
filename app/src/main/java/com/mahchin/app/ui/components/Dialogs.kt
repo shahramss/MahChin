@@ -39,6 +39,53 @@ import com.mahchin.app.domain.JalaliDate
 import com.mahchin.app.domain.toEnglishDigits
 import com.mahchin.app.domain.toPersianDigits
 
+
+@Composable
+fun VoiceOutlinedTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    singleLine: Boolean = true,
+    minLines: Int = 1,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    prompt: String = "متن را بگو"
+) {
+    val speechLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val text = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+                .orEmpty()
+            if (text.isNotBlank()) onValueChange(text)
+        }
+    }
+
+    fun startVoice() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fa-IR")
+            putExtra(RecognizerIntent.EXTRA_PROMPT, prompt)
+        }
+        try { speechLauncher.launch(intent) } catch (_: Exception) { }
+    }
+
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        singleLine = singleLine,
+        minLines = minLines,
+        keyboardOptions = keyboardOptions,
+        trailingIcon = {
+            IconButton(onClick = ::startVoice) {
+                Icon(Icons.Outlined.Mic, contentDescription = "ورود با ویس")
+            }
+        },
+        modifier = modifier
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskEditorDialog(
@@ -60,44 +107,26 @@ fun TaskEditorDialog(
     var expandedPriority by remember { mutableStateOf(false) }
     var expandedProject by remember { mutableStateOf(false) }
 
-    val speechLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val text = result.data
-                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-                ?.firstOrNull()
-                .orEmpty()
-            if (text.isNotBlank()) title = text
-        }
-    }
-
-    fun startVoice() {
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fa-IR")
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "عنوان تسک را بگو")
-        }
-        try { speechLauncher.launch(intent) } catch (_: Exception) { }
-    }
-
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(titleText) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
+                VoiceOutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("عنوان تسک") },
+                    label = "عنوان تسک",
                     singleLine = true,
-                    trailingIcon = {
-                        IconButton(onClick = ::startVoice) { Icon(Icons.Outlined.Mic, contentDescription = "ورود با ویس") }
-                    },
+                    prompt = "عنوان تسک را بگو",
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
+                VoiceOutlinedTextField(
                     value = desc,
                     onValueChange = { desc = it },
-                    label = { Text("توضیحات") },
+                    label = "توضیحات",
+                    singleLine = false,
+                    minLines = 2,
+                    prompt = "توضیحات را بگو",
                     modifier = Modifier.fillMaxWidth()
                 )
                 if (dayOfMonth != null) {

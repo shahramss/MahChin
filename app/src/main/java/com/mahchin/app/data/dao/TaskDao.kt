@@ -55,6 +55,9 @@ interface TaskDao {
     @Query("SELECT * FROM mind_map_nodes WHERE id = :id LIMIT 1")
     suspend fun getMindMapNode(id: Long): MindMapNode?
 
+    @Query("UPDATE mind_map_nodes SET x = :x, y = :y, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateMindMapNodePosition(id: Long, x: Float, y: Float, updatedAt: Long = System.currentTimeMillis())
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTemplate(task: MonthlyTemplateTask): Long
 

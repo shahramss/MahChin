@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -60,6 +61,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.consume
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -72,8 +74,10 @@ import com.mahchin.app.domain.JalaliCalendar
 import com.mahchin.app.domain.JalaliDate
 import com.mahchin.app.domain.toEnglishDigits
 import com.mahchin.app.domain.toPersianDigits
+import com.mahchin.app.ui.components.VoiceOutlinedTextField
 import com.mahchin.app.ui.viewmodel.MainViewModel
 import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
@@ -180,7 +184,8 @@ fun MindMapScreen(vm: MainViewModel) {
                 onCenterTap = { selectedNodeId = null },
                 onNodeLongPress = { actionNode = it },
                 onCenterLongPress = { centerActions = true },
-                onEmptyTap = { selectedNodeId = null }
+                onEmptyTap = { selectedNodeId = null },
+                onNodeMove = { node, x, y -> vm.moveMindMapNode(node.id, x, y) }
             )
         }
 
@@ -360,7 +365,8 @@ private fun XMindLikeCanvasCard(
     onCenterTap: () -> Unit,
     onNodeLongPress: (MindMapNode) -> Unit,
     onCenterLongPress: () -> Unit,
-    onEmptyTap: () -> Unit
+    onEmptyTap: () -> Unit,
+    onNodeMove: (MindMapNode, Float, Float) -> Unit
 ) {
     val surface = MaterialTheme.colorScheme.surface
     val outline = MaterialTheme.colorScheme.outline
@@ -371,6 +377,7 @@ private fun XMindLikeCanvasCard(
     val density = LocalDensity.current
     var scale by remember { mutableFloatStateOf(1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
+    var dragPositions by remember { mutableStateOf<Map<Long, Offset>>(emptyMap()) }
 
     Card(
         modifier = modifier.padding(bottom = 82.dp),
@@ -383,13 +390,47 @@ private fun XMindLikeCanvasCard(
             val w = with(density) { maxWidth.toPx() }
             val h = with(density) { maxHeight.toPx() }
             val origin = Offset(w / 2f, h / 2f) + pan
-            val graph = remember(projectTitle, nodes, selectedNodeId, primary, onPrimary, onSurface) {
-                buildXMindGraph(projectTitle, nodes, selectedNodeId, primary, onPrimary, onSurface)
+            val nodesForGraph = nodes.map { node ->
+                dragPositions[node.id]?.let { node.copy(x = it.x, y = it.y) } ?: node
+            }
+            val pixelScale = density.density.coerceAtLeast(1f)
+            val graph = remember(projectTitle, nodesForGraph, selectedNodeId, primary, onPrimary, onSurface, pixelScale) {
+                buildXMindGraph(projectTitle, nodesForGraph, selectedNodeId, primary, onPrimary, onSurface, pixelScale)
             }
 
             Canvas(
                 modifier = Modifier
                     .fillMaxSize()
+                    .pointerInput(graph, scale, pan) {
+                        var draggingNode: GraphNode? = null
+                        detectDragGestures(
+                            onDragStart = { start ->
+                                val worldStart = screenToWorld(start, origin, scale)
+                                draggingNode = graph.nodes.asReversed().firstOrNull { it.node != null && it.hit(worldStart) }
+                                draggingNode?.node?.let { onNodeTap(it) }
+                            },
+                            onDragEnd = {
+                                draggingNode?.let { g ->
+                                    val node = g.node
+                                    if (node != null) {
+                                        val finalPos = dragPositions[node.id] ?: g.center
+                                        onNodeMove(node, finalPos.x, finalPos.y)
+                                    }
+                                }
+                                draggingNode = null
+                            },
+                            onDragCancel = { draggingNode = null },
+                            onDrag = { change, dragAmount ->
+                                val node = draggingNode?.node
+                                if (node != null) {
+                                    change.consume()
+                                    val current = dragPositions[node.id] ?: draggingNode!!.center
+                                    val next = current + Offset(dragAmount.x / scale, dragAmount.y / scale)
+                                    dragPositions = dragPositions + (node.id to next)
+                                }
+                            }
+                        )
+                    }
                     .pointerInput(Unit) {
                         detectTransformGestures { _, panChange, zoomChange, _ ->
                             pan += panChange
@@ -462,33 +503,31 @@ private fun XMindLikeCanvasCard(
                     val radius = CornerRadius(18f * scale, 18f * scale)
 
                     drawRoundRect(
-                        color = if (graphNode.level == 0) graphNode.color.copy(alpha = 0.22f) else graphNode.color.copy(alpha = 0.13f),
-                        topLeft = topLeft - Offset(7f * scale, 7f * scale),
-                        size = Size(nodeW + 14f * scale, nodeH + 14f * scale),
-                        cornerRadius = CornerRadius(24f * scale, 24f * scale),
-                        style = Stroke(width = if (graphNode.selected) 4.5f * scale else 2.4f * scale)
+                        color = graphNode.color.copy(alpha = if (graphNode.selected) 0.22f else 0.12f),
+                        topLeft = topLeft - Offset(8f * scale, 8f * scale),
+                        size = Size(nodeW + 16f * scale, nodeH + 16f * scale),
+                        cornerRadius = CornerRadius(26f * scale, 26f * scale),
+                        style = Stroke(width = if (graphNode.selected) 4.2f * scale else 2.1f * scale)
                     )
+                    val fillColor = when (graphNode.level) {
+                        0 -> graphNode.color
+                        1 -> graphNode.color
+                        2 -> graphNode.color.copy(alpha = 0.94f)
+                        else -> graphNode.color.copy(alpha = 0.88f)
+                    }
                     drawRoundRect(
-                        color = if (graphNode.level <= 1) graphNode.color else surface,
+                        color = fillColor,
                         topLeft = topLeft,
                         size = Size(nodeW, nodeH),
                         cornerRadius = radius
                     )
-                    if (graphNode.level >= 2) {
-                        drawRoundRect(
-                            color = graphNode.color.copy(alpha = if (graphNode.selected) 0.95f else 0.55f),
-                            topLeft = topLeft,
-                            size = Size(8f * scale, nodeH),
-                            cornerRadius = CornerRadius(18f * scale, 18f * scale)
-                        )
-                    }
                     if (graphNode.selected) {
                         drawRoundRect(
-                            color = graphNode.color,
+                            color = Color.White.copy(alpha = 0.85f),
                             topLeft = topLeft,
                             size = Size(nodeW, nodeH),
                             cornerRadius = radius,
-                            style = Stroke(width = 3.2f * scale)
+                            style = Stroke(width = 3.0f * scale)
                         )
                     }
                     drawContext.canvas.nativeCanvas.drawCenteredMultilineText(
@@ -497,10 +536,10 @@ private fun XMindLikeCanvasCard(
                         y = center.y,
                         color = graphNode.textColor.toArgb(),
                         textSize = when (graphNode.level) {
-                            0 -> 17f * density.density * scale.coerceIn(0.75f, 1.25f)
-                            1 -> 14.2f * density.density * scale.coerceIn(0.75f, 1.25f)
-                            2 -> 12.7f * density.density * scale.coerceIn(0.75f, 1.25f)
-                            else -> 11.8f * density.density * scale.coerceIn(0.75f, 1.25f)
+                            0 -> 15.2f * density.density * scale.coerceIn(0.72f, 1.12f)
+                            1 -> 12.8f * density.density * scale.coerceIn(0.72f, 1.12f)
+                            2 -> 11.8f * density.density * scale.coerceIn(0.72f, 1.12f)
+                            else -> 10.8f * density.density * scale.coerceIn(0.72f, 1.12f)
                         },
                         bold = graphNode.level <= 1
                     )
@@ -608,9 +647,7 @@ private fun MindMapBottomBar(
                 shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Icon(Icons.Outlined.Add, null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(4.dp))
-                ToolbarButtonText("شاخه")
+                ToolbarButtonText("+", large = true)
             }
             Button(
                 onClick = onAddChild,
@@ -618,9 +655,7 @@ private fun MindMapBottomBar(
                 modifier = Modifier.weight(1f).height(48.dp),
                 shape = RoundedCornerShape(18.dp)
             ) {
-                Icon(Icons.Outlined.Add, null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(4.dp))
-                ToolbarButtonText("زیرشاخه")
+                ToolbarButtonText("++", large = true)
             }
             OutlinedButton(
                 onClick = onEditSelected,
@@ -638,13 +673,13 @@ private fun MindMapBottomBar(
 }
 
 @Composable
-private fun ToolbarButtonText(text: String) {
+private fun ToolbarButtonText(text: String, large: Boolean = false) {
     Text(
         text = text,
         maxLines = 1,
         softWrap = false,
         overflow = TextOverflow.Clip,
-        fontSize = 11.sp,
+        fontSize = if (large) 24.sp else 11.sp,
         fontWeight = FontWeight.Bold
     )
 }
@@ -655,7 +690,8 @@ private fun buildXMindGraph(
     selectedNodeId: Long?,
     primary: Color,
     onPrimary: Color,
-    onSurface: Color
+    onSurface: Color,
+    pixelScale: Float
 ): MindGraphLayout {
     val activeNodes = allNodes.filter { it.isActive }
     val children = activeNodes.groupBy { it.parentId }
@@ -680,8 +716,8 @@ private fun buildXMindGraph(
         node = null,
         title = projectTitle.ifBlank { "پروژه" },
         center = Offset.Zero,
-        width = nodeWidth(projectTitle, 0),
-        height = nodeHeight(projectTitle, 0),
+        width = nodeWidth(projectTitle, 0, pixelScale),
+        height = nodeHeight(projectTitle, 0, pixelScale),
         color = primary,
         textColor = onPrimary,
         level = 0,
@@ -692,16 +728,19 @@ private fun buildXMindGraph(
     val roots = children[null].orEmpty().sortedWith(compareBy({ it.orderIndex }, { it.createdAt }))
     if (roots.isEmpty()) return MindGraphLayout(graphNodes, lines)
 
-    val radiusX = 292f
-    val radiusY = 225f
+    val radiusX = 292f * pixelScale
+    val radiusY = 225f * pixelScale
     roots.forEachIndexed { index, root ->
         // ساعت‌گرد: از بالای صفحه شروع می‌شود و ریشه‌ها دور پروژه می‌چرخند.
         val angle = ((-90f + (360f / roots.size) * index) * Math.PI / 180.0).toFloat()
         val color = palette[index % palette.size]
         val dir = Offset(cos(angle), sin(angle))
-        val rootPosition = Offset(dir.x * radiusX, dir.y * radiusY)
-        val width = nodeWidth(root.title, 1)
-        val height = nodeHeight(root.title, 1)
+        val autoRootPosition = Offset(dir.x * radiusX, dir.y * radiusY)
+        val rootPosition = if (root.x != null && root.y != null) Offset(root.x, root.y) else autoRootPosition
+        val actualDir = rootPosition.normalizedOr(dir)
+        val actualAngle = atan2(actualDir.y, actualDir.x)
+        val width = nodeWidth(root.title, 1, pixelScale)
+        val height = nodeHeight(root.title, 1, pixelScale)
         graphNodes += GraphNode(
             node = root,
             title = root.title,
@@ -711,28 +750,29 @@ private fun buildXMindGraph(
             color = color,
             textColor = Color.White,
             level = 1,
-            side = if (dir.x >= 0f) 1 else -1,
+            side = if (actualDir.x >= 0f) 1 else -1,
             selected = selectedNodeId == root.id
         )
         lines += GraphLine(
             from = Offset.Zero,
-            to = rootPosition - dir * (width / 2f),
+            to = rootPosition - actualDir * (width / 2f),
             color = color,
-            side = if (dir.x >= 0f) 1 else -1,
-            angle = angle
+            side = if (actualDir.x >= 0f) 1 else -1,
+            angle = actualAngle
         )
         layoutClockwiseChildren(
             parent = root,
             parentPosition = rootPosition,
             parentWidth = width,
-            angle = angle,
+            angle = actualAngle,
             level = 2,
             children = children,
             branchColor = color,
             selectedNodeId = selectedNodeId,
             graphNodes = graphNodes,
             lines = lines,
-            onSurface = onSurface
+            onSurface = onSurface,
+            pixelScale = pixelScale
         )
     }
     return MindGraphLayout(graphNodes, lines)
@@ -749,7 +789,8 @@ private fun layoutClockwiseChildren(
     selectedNodeId: Long?,
     graphNodes: MutableList<GraphNode>,
     lines: MutableList<GraphLine>,
-    onSurface: Color
+    onSurface: Color,
+    pixelScale: Float
 ) {
     val directChildren = children[parent.id].orEmpty().sortedWith(compareBy({ it.orderIndex }, { it.createdAt }))
     if (directChildren.isEmpty()) return
@@ -757,9 +798,9 @@ private fun layoutClockwiseChildren(
     val radial = Offset(cos(angle), sin(angle))
     val perpendicular = Offset(-sin(angle), cos(angle))
     val leafSpacing = when (level) {
-        2 -> 118f
-        3 -> 106f
-        else -> 98f
+        2 -> 118f * pixelScale
+        3 -> 106f * pixelScale
+        else -> 98f * pixelScale
     }
     val totalLeaves = directChildren.sumOf { subtreeLeafCount(it, children).coerceAtLeast(1) }
     var cursor = -(totalLeaves * leafSpacing) / 2f
@@ -768,16 +809,17 @@ private fun layoutClockwiseChildren(
         val leaves = subtreeLeafCount(child, children).coerceAtLeast(1)
         val blockHeight = leaves * leafSpacing
         val tangentOffset = cursor + blockHeight / 2f
-        val width = nodeWidth(child.title, level)
-        val height = nodeHeight(child.title, level)
+        val width = nodeWidth(child.title, level, pixelScale)
+        val height = nodeHeight(child.title, level, pixelScale)
         val distance = when (level) {
-            2 -> 250f
-            3 -> 225f
-            else -> 205f
+            2 -> 250f * pixelScale
+            3 -> 225f * pixelScale
+            else -> 205f * pixelScale
         }
-        val pos = parentPosition + radial * distance + perpendicular * tangentOffset
-        val color = branchColor.copy(alpha = when (level) { 2 -> 0.92f; 3 -> 0.78f; else -> 0.66f })
-        val textColor = if (level == 2) Color.White else onSurface
+        val autoPos = parentPosition + radial * distance + perpendicular * tangentOffset
+        val pos = if (child.x != null && child.y != null) Offset(child.x, child.y) else autoPos
+        val color = branchColor.copy(alpha = when (level) { 2 -> 0.92f; 3 -> 0.80f; else -> 0.72f })
+        val textColor = Color.White
         graphNodes += GraphNode(
             node = child,
             title = child.title,
@@ -790,12 +832,14 @@ private fun layoutClockwiseChildren(
             side = if (radial.x >= 0f) 1 else -1,
             selected = selectedNodeId == child.id
         )
+        val lineDir = (pos - parentPosition).normalizedOr(radial)
+        val lineAngle = atan2(lineDir.y, lineDir.x)
         lines += GraphLine(
-            from = parentPosition + radial * (parentWidth / 2f),
-            to = pos - radial * (width / 2f),
+            from = parentPosition + lineDir * (parentWidth / 2f),
+            to = pos - lineDir * (width / 2f),
             color = branchColor,
-            side = if (radial.x >= 0f) 1 else -1,
-            angle = angle
+            side = if (lineDir.x >= 0f) 1 else -1,
+            angle = lineAngle
         )
         layoutClockwiseChildren(
             parent = child,
@@ -808,7 +852,8 @@ private fun layoutClockwiseChildren(
             selectedNodeId = selectedNodeId,
             graphNodes = graphNodes,
             lines = lines,
-            onSurface = onSurface
+            onSurface = onSurface,
+            pixelScale = pixelScale
         )
         cursor += blockHeight
     }
@@ -819,37 +864,58 @@ private fun subtreeLeafCount(node: MindMapNode, children: Map<Long?, List<MindMa
     return if (list.isEmpty()) 1 else list.sumOf { subtreeLeafCount(it, children) }
 }
 
-private fun nodeWidth(title: String, level: Int): Float {
-    return when (level) {
-        0 -> 198f
-        1 -> 184f
-        2 -> 174f
-        else -> 164f
+private fun nodeWidth(title: String, level: Int, pixelScale: Float): Float {
+    val lines = title.wrapNodeTitle(level)
+    val longest = lines.maxOfOrNull { it.length } ?: 8
+    val charWidth = when (level) {
+        0 -> 12.8f
+        1 -> 10.8f
+        2 -> 9.8f
+        else -> 9.2f
     }
+    val horizontalPadding = when (level) {
+        0 -> 74f
+        1 -> 64f
+        2 -> 58f
+        else -> 52f
+    }
+    val minWidth = when (level) {
+        0 -> 170f
+        1 -> 150f
+        2 -> 136f
+        else -> 124f
+    }
+    val maxWidth = when (level) {
+        0 -> 260f
+        1 -> 238f
+        2 -> 218f
+        else -> 202f
+    }
+    return ((longest * charWidth + horizontalPadding).coerceIn(minWidth, maxWidth)) * pixelScale
 }
 
-private fun nodeHeight(title: String, level: Int): Float {
+private fun nodeHeight(title: String, level: Int, pixelScale: Float): Float {
     val lines = title.wrapNodeTitle(level).size.coerceAtLeast(1)
     val lineHeight = when (level) {
-        0 -> 22f
-        1 -> 19f
-        2 -> 17f
-        else -> 16f
+        0 -> 20f
+        1 -> 17f
+        2 -> 15.5f
+        else -> 14.5f
     }
     val verticalPadding = when (level) {
-        0 -> 30f
-        1 -> 26f
-        2 -> 24f
-        else -> 22f
+        0 -> 36f
+        1 -> 32f
+        2 -> 30f
+        else -> 28f
     }
-    return (verticalPadding + lines * lineHeight).coerceAtLeast(
+    return ((verticalPadding + lines * lineHeight).coerceAtLeast(
         when (level) {
-            0 -> 62f
-            1 -> 56f
-            2 -> 50f
-            else -> 46f
+            0 -> 68f
+            1 -> 58f
+            2 -> 52f
+            else -> 48f
         }
-    )
+    )) * pixelScale
 }
 
 private fun GraphNode.hit(point: Offset): Boolean {
@@ -871,12 +937,17 @@ private operator fun Offset.plus(other: Offset): Offset = Offset(x + other.x, y 
 private operator fun Offset.minus(other: Offset): Offset = Offset(x - other.x, y - other.y)
 private operator fun Offset.times(value: Float): Offset = Offset(x * value, y * value)
 
+private fun Offset.normalizedOr(fallback: Offset): Offset {
+    val length = sqrt(x * x + y * y)
+    return if (length < 0.001f) fallback else Offset(x / length, y / length)
+}
+
 private fun String.wrapNodeTitle(level: Int): List<String> {
     val maxChars = when (level) {
         0 -> 18
-        1 -> 17
-        2 -> 16
-        else -> 15
+        1 -> 18
+        2 -> 17
+        else -> 16
     }
     val words = trim().toPersianDigits().split(Regex("\\s+")).filter { it.isNotBlank() }
     if (words.isEmpty()) return listOf("بدون عنوان")
@@ -1003,11 +1074,12 @@ private fun ProjectEditorDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            OutlinedTextField(
+            VoiceOutlinedTextField(
                 value = projectName,
                 onValueChange = { projectName = it },
-                label = { Text("نام پروژه") },
+                label = "نام پروژه",
                 singleLine = true,
+                prompt = "نام پروژه را بگو",
                 modifier = Modifier.fillMaxWidth()
             )
         },
@@ -1029,17 +1101,21 @@ private fun NodeEditorDialog(
         title = { Text(if (state.editNode == null) if (state.parentId == null) "شاخه اصلی جدید" else "زیرشاخه جدید" else "ویرایش نود") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
+                VoiceOutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("عنوان") },
+                    label = "عنوان",
                     singleLine = true,
+                    prompt = "عنوان نود را بگو",
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
+                VoiceOutlinedTextField(
                     value = desc,
                     onValueChange = { desc = it },
-                    label = { Text("توضیح کوتاه") },
+                    label = "توضیح کوتاه",
+                    singleLine = false,
+                    minLines = 2,
+                    prompt = "توضیح نود را بگو",
                     modifier = Modifier.fillMaxWidth()
                 )
             }
