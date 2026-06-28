@@ -504,9 +504,9 @@ private fun XMindLikeCanvasCard(
                     val nodeH = graphNode.height * scale
                     val topLeft = Offset(center.x - nodeW / 2f, center.y - nodeH / 2f)
                     val radiusValue = when (graphNode.level) {
-                        0 -> 18f
-                        1 -> 14f
-                        else -> 12f
+                        0 -> 20f
+                        1 -> 16f
+                        else -> 14f
                     } * scale
                     val radius = CornerRadius(radiusValue, radiusValue)
 
@@ -724,9 +724,9 @@ private fun buildXMindGraph(
     val graphNodes = mutableListOf<GraphNode>()
 
     val palette = listOf(
-        Color(0xFFFFA59F), Color(0xFFFFC28A), Color(0xFFAEEAC7), Color(0xFF7EE6DD),
-        Color(0xFFA7D6FF), Color(0xFFC9B3FF), Color(0xFFFF9BC1), Color(0xFFFFD36E),
-        Color(0xFFB5EAD7), Color(0xFFD9B8FF), Color(0xFFA8D8EA), Color(0xFFFFB4A2)
+        Color(0xFFFFB3B3), Color(0xFFFFC89A), Color(0xFFFFD97D), Color(0xFFB8F2D6),
+        Color(0xFF88E7E0), Color(0xFFA9D5FF), Color(0xFFC7B8FF), Color(0xFFFFB6D5),
+        Color(0xFFD7C6FF), Color(0xFFB6E8C8), Color(0xFFFFC6AE), Color(0xFFAED9F8)
     )
 
     val centerStyle = nodeStyle(0)
@@ -920,7 +920,7 @@ private fun nodeWidth(title: String, level: Int, pixelScale: Float): Float {
     val longestMeasured = prepared.lines().maxOfOrNull { paint.measureText(it) } ?: paint.measureText("بدون عنوان")
     val minWidth = when (level) { 0 -> 230f; 1 -> 168f; 2 -> 142f; else -> 122f } * pixelScale
     val maxWidth = when (level) { 0 -> 620f; 1 -> 520f; 2 -> 430f; else -> 360f } * pixelScale
-    val desired = longestMeasured + style.horizontalPadding * 2f * pixelScale
+    val desired = longestMeasured * 1.05f + style.horizontalPadding * 2f * pixelScale
     return desired.coerceIn(minWidth, maxWidth)
 }
 
@@ -936,7 +936,7 @@ private fun nodeHeight(title: String, level: Int, pixelScale: Float): Float {
         width = innerWidth
     ).height.toFloat()
     val minHeight = when (level) { 0 -> 112f; 1 -> 82f; 2 -> 66f; else -> 56f } * pixelScale
-    return (layoutHeight + style.verticalPadding * 2f * pixelScale).coerceAtLeast(minHeight)
+    return (layoutHeight + style.verticalPadding * 2f * pixelScale + 4f * pixelScale).coerceAtLeast(minHeight)
 }
 
 private fun GraphNode.hit(point: Offset): Boolean {
@@ -990,7 +990,7 @@ private fun String.preparedNodeText(level: Int): String = wrapNodeTitle(level).j
 private fun mindMapTextPaint(textSize: Float, bold: Boolean, color: Int): TextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
     this.color = color
     this.textSize = textSize
-    textAlign = Paint.Align.CENTER
+    textAlign = Paint.Align.LEFT
     isFakeBoldText = bold
 }
 
@@ -999,7 +999,7 @@ private fun buildMindMapStaticLayout(text: String, textSize: Float, bold: Boolea
     return StaticLayout.Builder.obtain(text, 0, text.length, paint, width.coerceAtLeast(1))
         .setAlignment(Layout.Alignment.ALIGN_CENTER)
         .setTextDirection(TextDirectionHeuristics.RTL)
-        .setLineSpacing(0f, 1.06f)
+        .setLineSpacing(0f, 1.0f)
         .setIncludePad(true)
         .build()
 }
