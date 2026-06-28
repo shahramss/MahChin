@@ -914,7 +914,15 @@ private fun edgePoint(center: Offset, width: Float, height: Float, toward: Offse
 }
 
 private fun rootFamilyColor(node: MindMapNode, activeNodes: List<MindMapNode>, children: Map<Long?, List<MindMapNode>>, palette: List<Color>): Color {
-    val ordered = activeNodes.sortedWith(compareBy({ it.levelHint }, { it.orderIndex }, { it.createdAt }, { it.id ?: 0L }))
+    val ordered = activeNodes.sortedWith(
+        compareBy<MindMapNode>(
+            { if (it.parentId == null) 0 else 1 },
+            { it.parentId ?: 0L },
+            { it.orderIndex },
+            { it.createdAt },
+            { it.id }
+        )
+    )
     val index = ordered.indexOfFirst { it.id == node.id }.coerceAtLeast(0)
     return palette[index % palette.size]
 }
