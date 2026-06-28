@@ -15,6 +15,8 @@ data class MindMapNode(
     val title: String,
     val description: String = "",
     val orderIndex: Int = 0,
+    val x: Float? = null,
+    val y: Float? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val isActive: Boolean = true
