@@ -881,15 +881,15 @@ private fun layoutChildrenStrictTree(
 private fun branchBlockHeight(node: MindMapNode, level: Int, children: Map<Long?, List<MindMapNode>>, pixelScale: Float): Float {
     val own = nodeHeight(node.title, level, pixelScale)
     val directChildren = children[node.id].orEmpty().filter { it.isActive }
-    if (directChildren.isEmpty()) return own
+    if (directChildren.isEmpty()) return own + 10f * pixelScale
     val kids = directChildren.sumOf { branchBlockHeight(it, level + 1, children, pixelScale).toDouble() }.toFloat() +
         (directChildren.size - 1).coerceAtLeast(0) * childVerticalGap(level + 1, pixelScale)
-    return max(own, kids)
+    return max(own, kids) + 14f * pixelScale
 }
 
-private fun rootVerticalGap(pixelScale: Float): Float = 74f * pixelScale
-private fun childVerticalGap(level: Int, pixelScale: Float): Float = (when (level) { 2 -> 34f; 3 -> 26f; else -> 22f }) * pixelScale
-private fun horizontalGap(level: Int, pixelScale: Float): Float = (when (level) { 2 -> 150f; 3 -> 120f; else -> 96f }) * pixelScale
+private fun rootVerticalGap(pixelScale: Float): Float = 112f * pixelScale
+private fun childVerticalGap(level: Int, pixelScale: Float): Float = (when (level) { 2 -> 62f; 3 -> 48f; else -> 38f }) * pixelScale
+private fun horizontalGap(level: Int, pixelScale: Float): Float = (when (level) { 2 -> 178f; 3 -> 146f; else -> 120f }) * pixelScale
 
 private fun addGraphLine(lines: MutableList<GraphLine>, fromCenter: Offset, fromWidth: Float, fromHeight: Float, toCenter: Offset, toWidth: Float, toHeight: Float, color: Color, lineSide: Int) {
     val start = edgePoint(fromCenter, fromWidth, fromHeight, toCenter)
@@ -964,25 +964,61 @@ private fun Offset.normalizedOr(fallback: Offset): Offset {
 }
 
 private fun String.wrapNodeTitle(level: Int): List<String> {
-    val maxWordsPerLine = when (level) { 0 -> 7; 1 -> 7; 2 -> 6; else -> 6 }
-    val maxCharsPerLine = when (level) { 0 -> 46; 1 -> 42; 2 -> 36; else -> 32 }
-    val words = trim().toPersianDigits().split(Regex("\\s+")).filter { it.isNotBlank() }
+    val clean = trim().toPersianDigits().replace(Regex("\\s+"), " ")
+    if (clean.isBlank()) return listOf("بدون عنوان")
+    val words = clean.split(" ").filter { it.isNotBlank() }
     if (words.isEmpty()) return listOf("بدون عنوان")
+
+    val maxWordsPerLine = when (level) {
+        0 -> 7
+        1 -> 7
+        2 -> 6
+        else -> 6
+    }
+    val targetLines = when {
+        words.size <= maxWordsPerLine -> 1
+        words.size <= maxWordsPerLine * 2 -> 2
+        else -> 3
+    }
+
+    val totalChars = words.sumOf { it.length } + (words.size - 1)
+    val targetCharsPerLine = (totalChars.toFloat() / targetLines).toInt().coerceAtLeast(8)
     val lines = mutableListOf<String>()
     var current = mutableListOf<String>()
-    fun currentText(): String = current.joinToString(" ")
-    fun flush() { if (current.isNotEmpty()) { lines += currentText(); current = mutableListOf() } }
-    words.forEach { raw ->
-        val pieces = if (raw.length > maxCharsPerLine) raw.chunked(maxCharsPerLine) else listOf(raw)
-        pieces.forEach { word ->
-            if (current.isEmpty()) current += word else {
-                val candidate = currentText() + " " + word
-                if (current.size < maxWordsPerLine && candidate.length <= maxCharsPerLine) current += word else { flush(); current += word }
-            }
+    var currentChars = 0
+
+    fun flush() {
+        if (current.isNotEmpty()) {
+            lines += current.joinToString(" ")
+            current = mutableListOf()
+            currentChars = 0
         }
     }
+
+    words.forEachIndexed { index, word ->
+        val additional = if (current.isEmpty()) word.length else word.length + 1
+        val remainingWords = words.size - index
+        val remainingLines = (targetLines - lines.size).coerceAtLeast(1)
+        val forceFlush = current.isNotEmpty() && (
+            current.size >= maxWordsPerLine ||
+            (currentChars + additional > targetCharsPerLine && remainingWords >= remainingLines)
+        )
+        if (forceFlush) flush()
+        current += word
+        currentChars += if (current.size == 1) word.length else word.length + 1
+    }
     flush()
-    return lines
+
+    if (lines.size >= 2 && lines.last().split(" ").size == 1) {
+        val previousWords = lines[lines.lastIndex - 1].split(" ").toMutableList()
+        if (previousWords.size >= 3) {
+            val moved = previousWords.removeLast()
+            lines[lines.lastIndex - 1] = previousWords.joinToString(" ")
+            lines[lines.lastIndex] = "$moved ${lines.last()}"
+        }
+    }
+
+    return lines.filter { it.isNotBlank() }
 }
 
 private fun String.preparedNodeText(level: Int): String = wrapNodeTitle(level).joinToString("\n")
