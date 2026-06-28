@@ -122,7 +122,7 @@ fun MindMapScreen(vm: MainViewModel) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text("مایندمپ", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text(
-                        "چیدمان منظم شبیه XMind؛ هر شاخه به اندازه زیرشاخه‌هایش فضا می‌گیرد.",
+                        "سبک XMind؛ نود مرکزی واضح، شاخه‌های نرم و فاصله‌گذاری هوشمند.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -374,7 +374,7 @@ private fun XMindLikeCanvasCard(
     val onSurface = MaterialTheme.colorScheme.onSurface
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
     val density = LocalDensity.current
-    var scale by remember { mutableFloatStateOf(0.38f) }
+    var scale by remember { mutableFloatStateOf(0.34f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
     var dragPositions by remember { mutableStateOf<Map<Long, Offset>>(emptyMap()) }
 
@@ -502,18 +502,25 @@ private fun XMindLikeCanvasCard(
                     // گره‌ها شبیه XMind: کپسولی/کارت باریک، با متن کاملاً داخل کادر.
                     val radius = CornerRadius(9f * scale, 9f * scale)
 
+                    // subtle card shadow, then selected outline, then pastel node fill
                     drawRoundRect(
-                        color = graphNode.color.copy(alpha = if (graphNode.selected) 0.22f else 0.12f),
+                        color = Color.Black.copy(alpha = if (graphNode.level == 0) 0.16f else 0.10f),
+                        topLeft = topLeft + Offset(0f, 5f * scale),
+                        size = Size(nodeW, nodeH),
+                        cornerRadius = radius
+                    )
+                    drawRoundRect(
+                        color = graphNode.color.copy(alpha = if (graphNode.selected) 0.42f else 0.20f),
                         topLeft = topLeft - Offset(3f * scale, 3f * scale),
                         size = Size(nodeW + 6f * scale, nodeH + 6f * scale),
-                        cornerRadius = CornerRadius(11f * scale, 11f * scale),
-                        style = Stroke(width = if (graphNode.selected) 2.4f * scale else 1.2f * scale)
+                        cornerRadius = CornerRadius(13f * scale, 13f * scale),
+                        style = Stroke(width = if (graphNode.selected) 2.6f * scale else 1.0f * scale)
                     )
                     val fillColor = when (graphNode.level) {
                         0 -> graphNode.color
                         1 -> graphNode.color
-                        2 -> graphNode.color.copy(alpha = 0.94f)
-                        else -> graphNode.color.copy(alpha = 0.88f)
+                        2 -> graphNode.color.copy(alpha = 0.96f)
+                        else -> graphNode.color.copy(alpha = 0.90f)
                     }
                     drawRoundRect(
                         color = fillColor,
@@ -532,10 +539,10 @@ private fun XMindLikeCanvasCard(
                     }
                     val nodeTextSize = when (graphNode.level) {
                         // نود مرکزی همان پروژه است؛ باید تقریباً دو برابر نودهای معمولی دیده شود.
-                        0 -> 18.8f
-                        1 -> 9.4f
-                        2 -> 8.6f
-                        else -> 7.9f
+                        0 -> 22.0f
+                        1 -> 10.8f
+                        2 -> 9.5f
+                        else -> 8.8f
                     } * density.density * scale
                     drawContext.canvas.nativeCanvas.save()
                     drawContext.canvas.nativeCanvas.clipRect(
@@ -546,11 +553,12 @@ private fun XMindLikeCanvasCard(
                     )
                     drawContext.canvas.nativeCanvas.drawXMindRtlMultilineText(
                         lines = graphNode.title.wrapNodeTitle(graphNode.level),
-                        rightX = topLeft.x + nodeW - if (graphNode.level == 0) 22f * scale else 12f * scale,
+                        x = if (graphNode.level == 0) center.x else topLeft.x + nodeW - 14f * scale,
                         centerY = center.y,
                         color = graphNode.textColor.toArgb(),
                         textSize = nodeTextSize,
-                        bold = graphNode.level <= 1
+                        bold = graphNode.level <= 1,
+                        align = if (graphNode.level == 0) Paint.Align.CENTER else Paint.Align.RIGHT
                     )
                     drawContext.canvas.nativeCanvas.restore()
                 }
@@ -603,7 +611,7 @@ private fun XMindLikeCanvasCard(
                     .padding(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                TextButton(onClick = { scale = 0.38f; pan = Offset.Zero }) { Text("مرکز") }
+                TextButton(onClick = { scale = 0.34f; pan = Offset.Zero }) { Text("مرکز") }
                 TextButton(onClick = { scale = (scale * 1.15f).coerceAtMost(2.8f) }) { Text("+") }
                 TextButton(onClick = { scale = (scale / 1.15f).coerceAtLeast(0.07f) }) { Text("−") }
             }
@@ -707,19 +715,20 @@ private fun buildXMindGraph(
     val children = activeNodes.groupBy { it.parentId }
     val graphNodes = mutableListOf<GraphNode>()
     val lines = mutableListOf<GraphLine>()
+    // Pastel XMind-like colors: readable, calm, and different per branch.
     val palette = listOf(
-        Color(0xFFFF4D8D),
-        Color(0xFF00C2FF),
-        Color(0xFFFFB020),
-        Color(0xFF7C3AED),
-        Color(0xFF22C55E),
-        Color(0xFFFF5C35),
-        Color(0xFF14B8A6),
-        Color(0xFF6366F1),
-        Color(0xFFEAB308),
-        Color(0xFFEF4444),
-        Color(0xFF06B6D4),
-        Color(0xFFA3E635)
+        Color(0xFFFFA6C9),
+        Color(0xFF9FE7F5),
+        Color(0xFFFFD084),
+        Color(0xFFC4B5FD),
+        Color(0xFFA7F3D0),
+        Color(0xFFFFB4A2),
+        Color(0xFF99F6E4),
+        Color(0xFFBFDBFE),
+        Color(0xFFFDE68A),
+        Color(0xFFFECACA),
+        Color(0xFFBAE6FD),
+        Color(0xFFD9F99D)
     )
 
     val centerWidth = nodeWidth(projectTitle, 0, pixelScale)
@@ -788,8 +797,8 @@ private fun layoutXMindRootSide(
     pixelScale: Float
 ) {
     if (roots.isEmpty()) return
-    val rootDistance = (centerWidth / 2f) + 430f * pixelScale
-    val rootGap = 150f * pixelScale
+    val rootDistance = (centerWidth / 2f) + 520f * pixelScale
+    val rootGap = 190f * pixelScale
     val totalHeight = roots.sumOf { branchBlockHeight(it, 1, children, pixelScale).toDouble() }.toFloat() +
         (roots.size - 1).coerceAtLeast(0) * rootGap
     var cursor = -totalHeight / 2f
@@ -914,19 +923,19 @@ private fun branchBlockHeight(
 
 private fun branchVerticalGap(level: Int, pixelScale: Float): Float {
     return when (level) {
-        1 -> 120f
-        2 -> 95f
-        3 -> 80f
-        else -> 68f
+        1 -> 150f
+        2 -> 118f
+        3 -> 96f
+        else -> 82f
     } * pixelScale
 }
 
 private fun branchHorizontalDistance(level: Int, pixelScale: Float): Float {
     return when (level) {
-        2 -> 470f
-        3 -> 390f
-        4 -> 340f
-        else -> 310f
+        2 -> 520f
+        3 -> 430f
+        4 -> 370f
+        else -> 330f
     } * pixelScale
 }
 
@@ -970,28 +979,28 @@ private fun nodeWidth(title: String, level: Int, pixelScale: Float): Float {
     val longest = lines.maxOfOrNull { it.length } ?: 8
     // XMind-style: width follows the longest readable line; padding is balanced and not too wide.
     val charWidth = when (level) {
-        0 -> 13.8f
-        1 -> 7.7f
-        2 -> 7.1f
-        else -> 6.7f
+        0 -> 15.8f
+        1 -> 8.6f
+        2 -> 7.7f
+        else -> 7.1f
     }
     val horizontalPadding = when (level) {
-        0 -> 88f
-        1 -> 26f
-        2 -> 23f
-        else -> 20f
+        0 -> 120f
+        1 -> 36f
+        2 -> 30f
+        else -> 26f
     }
     val minWidth = when (level) {
-        0 -> 220f
-        1 -> 92f
-        2 -> 82f
-        else -> 74f
+        0 -> 300f
+        1 -> 120f
+        2 -> 104f
+        else -> 92f
     }
     val maxWidth = when (level) {
-        0 -> 760f
-        1 -> 390f
-        2 -> 340f
-        else -> 300f
+        0 -> 860f
+        1 -> 430f
+        2 -> 370f
+        else -> 330f
     }
     return ((longest * charWidth + horizontalPadding).coerceIn(minWidth, maxWidth)) * pixelScale
 }
@@ -999,24 +1008,24 @@ private fun nodeWidth(title: String, level: Int, pixelScale: Float): Float {
 private fun nodeHeight(title: String, level: Int, pixelScale: Float): Float {
     val lines = title.wrapNodeTitle(level).size.coerceAtLeast(1)
     val lineHeight = when (level) {
-        0 -> 25.5f
-        1 -> 14.4f
-        2 -> 13.1f
-        else -> 12.2f
+        0 -> 31.0f
+        1 -> 16.2f
+        2 -> 14.4f
+        else -> 13.2f
     }
-    // نود مرکزی باید بزرگ، خوانا و شبیه عنوان پروژه باشد؛ حدود دو برابر نودهای دیگر.
+    // نود مرکزی بزرگ‌ترین بخش نقشه است؛ نودهای دیگر کارت‌های XMind-like هستند.
     val verticalPadding = when (level) {
-        0 -> 56f
-        1 -> 22f
-        2 -> 19f
-        else -> 17f
+        0 -> 76f
+        1 -> 30f
+        2 -> 25f
+        else -> 22f
     }
     return ((verticalPadding + lines * lineHeight).coerceAtLeast(
         when (level) {
-            0 -> 96f
-            1 -> 40f
-            2 -> 35f
-            else -> 31f
+            0 -> 132f
+            1 -> 52f
+            2 -> 44f
+            else -> 38f
         }
     )) * pixelScale
 }
@@ -1049,16 +1058,16 @@ private fun String.wrapNodeTitle(level: Int): List<String> {
     // XMind-style wrapping: keep a readable sentence in each line and wrap around 6-8 words,
     // not two words per line. Persian/RTL text stays complete and inside the node.
     val maxWordsPerLine = when (level) {
-        0 -> 8
-        1 -> 8
-        2 -> 7
+        0 -> 7
+        1 -> 6
+        2 -> 6
         else -> 6
     }
     val maxCharsPerLine = when (level) {
-        0 -> 58
-        1 -> 54
+        0 -> 64
+        1 -> 52
         2 -> 48
-        else -> 42
+        else -> 44
     }
     val words = trim().toPersianDigits().split(Regex("\\s+")).filter { it.isNotBlank() }
     if (words.isEmpty()) return listOf("بدون عنوان")
@@ -1096,23 +1105,24 @@ private fun String.wrapNodeTitle(level: Int): List<String> {
 
 private fun android.graphics.Canvas.drawXMindRtlMultilineText(
     lines: List<String>,
-    rightX: Float,
+    x: Float,
     centerY: Float,
     color: Int,
     textSize: Float,
-    bold: Boolean
+    bold: Boolean,
+    align: Paint.Align
 ) {
     val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         this.color = color
         this.textSize = textSize
-        textAlign = Paint.Align.RIGHT
+        textAlign = align
         isFakeBoldText = bold
     }
-    val lineHeight = (paint.descent() - paint.ascent()) * 1.15f
+    val lineHeight = (paint.descent() - paint.ascent()) * 1.18f
     val totalHeight = lineHeight * lines.size
     var baseline = centerY - totalHeight / 2f - paint.ascent()
     lines.forEach { line ->
-        drawText(line, rightX, baseline, paint)
+        drawText(line, x, baseline, paint)
         baseline += lineHeight
     }
 }
