@@ -1,6 +1,10 @@
 package com.mahchin.app.ui.screens
 
 import android.graphics.Paint
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextPaint
+import android.text.TextDirectionHeuristics
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -539,17 +543,18 @@ private fun XMindLikeCanvasCard(
                     val textSize = graphNode.fontSize * pixelScale * scale
                     val horizontalPadding = graphNode.horizontalPadding * pixelScale * scale
                     val verticalPadding = graphNode.verticalPadding * pixelScale * scale
-                    // متن دیگر کلیپ نمی‌شود؛ خود نود بر اساس تعداد خطوط متن اندازه می‌گیرد.
-                    // فاصله داخلی نودها تغییر نکرده است.
-                    drawContext.canvas.nativeCanvas.drawXMindRtlMultilineText(
-                        lines = graphNode.title.wrapNodeTitle(graphNode.level),
-                        x = if (graphNode.level == 0) center.x else topLeft.x + nodeW - horizontalPadding,
+                    // متن دقیقاً داخل محدوده خود نود رسم می‌شود و از کادر بیرون نمی‌زند.
+                    // فاصله داخلی همان مقدار قبلی است؛ فقط روش اندازه‌گیری/رسم متن اصلاح شده.
+                    drawContext.canvas.nativeCanvas.drawXMindRtlTextInsideNode(
+                        text = graphNode.title,
+                        level = graphNode.level,
+                        left = topLeft.x + horizontalPadding,
                         top = topLeft.y + verticalPadding,
+                        right = topLeft.x + nodeW - horizontalPadding,
                         bottom = topLeft.y + nodeH - verticalPadding,
                         color = graphNode.textColor.toArgb(),
                         textSize = textSize,
-                        bold = graphNode.level <= 1,
-                        align = if (graphNode.level == 0) Paint.Align.CENTER else Paint.Align.RIGHT
+                        bold = graphNode.level <= 1
                     )
                 }
             }
@@ -572,8 +577,39 @@ private fun XMindLikeCanvasCard(
                     color = onSurfaceVariant.copy(alpha = 0.82f),
                     style = MaterialTheme.typography.labelSmall
                 )
-                // برای جلوگیری از قاطی شدن متن انتخاب با عنوان بالای مایندمپ،
-                // انتخاب نود فقط با کادر دور خود نود نمایش داده می‌شود.
+                val selectedInfoNode = nodes.firstOrNull { it.id == selectedNodeId && it.isActive }
+                if (selectedInfoNode != null) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0C3C3B).copy(alpha = 0.92f)),
+                        border = BorderStroke(1.dp, Color(0xFF2EE6D6).copy(alpha = 0.55f)),
+                        elevation = CardDefaults.cardElevation(0.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Text(
+                                "انتخاب: ${selectedInfoNode.title}",
+                                color = Color(0xFF7FF7EA),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (selectedInfoNode.description.isNotBlank()) {
+                                Text(
+                                    selectedInfoNode.description,
+                                    color = Color.White.copy(alpha = 0.74f),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
             Row(
@@ -878,20 +914,29 @@ private fun rootFamilyColor(node: MindMapNode, activeNodes: List<MindMapNode>, c
 }
 
 private fun nodeWidth(title: String, level: Int, pixelScale: Float): Float {
-    val lines = title.wrapNodeTitle(level)
-    val longest = lines.maxOfOrNull { it.length } ?: 6
     val style = nodeStyle(level)
-    val textWidth = longest * style.fontSize * 0.58f
-    val minWidth = when (level) { 0 -> 230f; 1 -> 168f; 2 -> 142f; else -> 122f }
-    val maxWidth = when (level) { 0 -> 560f; 1 -> 430f; 2 -> 340f; else -> 290f }
-    return (textWidth + style.horizontalPadding * 2f).coerceIn(minWidth, maxWidth) * pixelScale
+    val paint = mindMapTextPaint(style.fontSize * pixelScale, level <= 1, Color.Black.toArgb())
+    val prepared = title.preparedNodeText(level)
+    val longestMeasured = prepared.lines().maxOfOrNull { paint.measureText(it) } ?: paint.measureText("بدون عنوان")
+    val minWidth = when (level) { 0 -> 230f; 1 -> 168f; 2 -> 142f; else -> 122f } * pixelScale
+    val maxWidth = when (level) { 0 -> 620f; 1 -> 520f; 2 -> 430f; else -> 360f } * pixelScale
+    val desired = longestMeasured + style.horizontalPadding * 2f * pixelScale
+    return desired.coerceIn(minWidth, maxWidth)
 }
 
 private fun nodeHeight(title: String, level: Int, pixelScale: Float): Float {
-    val lines = title.wrapNodeTitle(level).size.coerceAtLeast(1)
     val style = nodeStyle(level)
-    val minHeight = when (level) { 0 -> 112f; 1 -> 82f; 2 -> 66f; else -> 56f }
-    return (lines * style.fontSize * 1.62f + style.verticalPadding * 2.4f).coerceAtLeast(minHeight) * pixelScale
+    val width = nodeWidth(title, level, pixelScale)
+    val innerWidth = (width - style.horizontalPadding * 2f * pixelScale).toInt().coerceAtLeast(32)
+    val layoutHeight = buildMindMapStaticLayout(
+        text = title.preparedNodeText(level),
+        textSize = style.fontSize * pixelScale,
+        bold = level <= 1,
+        color = Color.Black.toArgb(),
+        width = innerWidth
+    ).height.toFloat()
+    val minHeight = when (level) { 0 -> 112f; 1 -> 82f; 2 -> 66f; else -> 56f } * pixelScale
+    return (layoutHeight + style.verticalPadding * 2f * pixelScale).coerceAtLeast(minHeight)
 }
 
 private fun GraphNode.hit(point: Offset): Boolean {
@@ -920,7 +965,7 @@ private fun Offset.normalizedOr(fallback: Offset): Offset {
 
 private fun String.wrapNodeTitle(level: Int): List<String> {
     val maxWordsPerLine = when (level) { 0 -> 7; 1 -> 7; 2 -> 6; else -> 6 }
-    val maxCharsPerLine = when (level) { 0 -> 44; 1 -> 38; 2 -> 32; else -> 28 }
+    val maxCharsPerLine = when (level) { 0 -> 46; 1 -> 42; 2 -> 36; else -> 32 }
     val words = trim().toPersianDigits().split(Regex("\\s+")).filter { it.isNotBlank() }
     if (words.isEmpty()) return listOf("بدون عنوان")
     val lines = mutableListOf<String>()
@@ -940,33 +985,51 @@ private fun String.wrapNodeTitle(level: Int): List<String> {
     return lines
 }
 
-private fun android.graphics.Canvas.drawXMindRtlMultilineText(
-    lines: List<String>,
-    x: Float,
+private fun String.preparedNodeText(level: Int): String = wrapNodeTitle(level).joinToString("\n")
+
+private fun mindMapTextPaint(textSize: Float, bold: Boolean, color: Int): TextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+    this.color = color
+    this.textSize = textSize
+    textAlign = Paint.Align.CENTER
+    isFakeBoldText = bold
+}
+
+private fun buildMindMapStaticLayout(text: String, textSize: Float, bold: Boolean, color: Int, width: Int): StaticLayout {
+    val paint = mindMapTextPaint(textSize, bold, color)
+    return StaticLayout.Builder.obtain(text, 0, text.length, paint, width.coerceAtLeast(1))
+        .setAlignment(Layout.Alignment.ALIGN_CENTER)
+        .setTextDirection(TextDirectionHeuristics.RTL)
+        .setLineSpacing(0f, 1.06f)
+        .setIncludePad(true)
+        .build()
+}
+
+private fun android.graphics.Canvas.drawXMindRtlTextInsideNode(
+    text: String,
+    level: Int,
+    left: Float,
     top: Float,
+    right: Float,
     bottom: Float,
     color: Int,
     textSize: Float,
-    bold: Boolean,
-    align: Paint.Align
+    bold: Boolean
 ) {
-    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        this.color = color
-        this.textSize = textSize
-        textAlign = align
-        isFakeBoldText = bold
-    }
-    val fm = paint.fontMetrics
-    // از top/bottom واقعی فونت استفاده می‌کنیم تا بالای حروف فارسی در خط اول بریده نشود.
-    val glyphHeight = fm.bottom - fm.top
-    val lineHeight = glyphHeight * 1.08f
-    val contentHeight = glyphHeight + (lines.size - 1).coerceAtLeast(0) * lineHeight
-    val available = (bottom - top).coerceAtLeast(contentHeight)
-    var baseline = top + (available - contentHeight).coerceAtLeast(0f) / 2f - fm.top
-    lines.forEach { line ->
-        drawText(line, x, baseline, paint)
-        baseline += lineHeight
-    }
+    val width = (right - left).toInt().coerceAtLeast(1)
+    val height = (bottom - top).coerceAtLeast(1f)
+    val layout = buildMindMapStaticLayout(
+        text = text.preparedNodeText(level),
+        textSize = textSize,
+        bold = bold,
+        color = color,
+        width = width
+    )
+    val y = top + ((height - layout.height).coerceAtLeast(0f) / 2f)
+    save()
+    clipRect(left, top, right, bottom)
+    translate(left, y)
+    layout.draw(this)
+    restore()
 }
 
 private data class MindAction(
