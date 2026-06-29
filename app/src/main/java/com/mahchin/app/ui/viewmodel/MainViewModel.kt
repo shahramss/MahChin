@@ -253,6 +253,44 @@ class MainViewModel(
         }
     }
 
+
+    fun deleteTaskGroup(items: List<TaskItem>) {
+        if (items.isEmpty()) return
+        viewModelScope.launch {
+            items.forEach { item ->
+                TaskAlarmScheduler.cancel(app, item)
+                repository.deleteTask(item)
+            }
+            ReminderScheduler.scheduleImmediateCheck(app)
+        }
+    }
+
+    fun moveTaskGroupToTomorrow(items: List<TaskItem>) {
+        if (items.isEmpty()) return
+        viewModelScope.launch {
+            items.forEach { repository.moveTaskToTomorrow(it) }
+            ReminderScheduler.scheduleImmediateCheck(app)
+        }
+    }
+
+    fun moveTaskGroupToCustomDate(items: List<TaskItem>, date: JalaliDate) {
+        if (items.isEmpty()) return
+        viewModelScope.launch {
+            items.forEach { repository.moveTaskToDate(it, date) }
+            ReminderScheduler.scheduleImmediateCheck(app)
+        }
+    }
+
+    fun setTaskGroupAlarm(items: List<TaskItem>, date: JalaliDate, hour: Int, minute: Int) {
+        if (items.isEmpty()) return
+        viewModelScope.launch {
+            val millis = repository.toEpochMillis(date, hour, minute)
+            items.forEach { repository.setTaskAlarm(it, millis) }
+            rescheduleTaskAlarms()
+            _settingsMessage.value = "آلارم گروهی تنظیم شد."
+        }
+    }
+
     fun setTaskAlarm(item: TaskItem, date: JalaliDate, hour: Int, minute: Int) {
         viewModelScope.launch {
             val millis = repository.toEpochMillis(date, hour, minute)

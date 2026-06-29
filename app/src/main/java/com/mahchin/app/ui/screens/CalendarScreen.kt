@@ -1,7 +1,9 @@
 package com.mahchin.app.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,12 +18,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -34,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.mahchin.app.data.model.TaskItem
@@ -41,8 +44,8 @@ import com.mahchin.app.domain.JalaliCalendar
 import com.mahchin.app.domain.JalaliDate
 import com.mahchin.app.domain.toPersianDigits
 import com.mahchin.app.ui.components.JalaliDateDialog
+import com.mahchin.app.ui.components.MindMapAwareTaskList
 import com.mahchin.app.ui.components.TaskAlarmDialog
-import com.mahchin.app.ui.components.TaskCard
 import com.mahchin.app.ui.components.TaskEditorDialog
 import com.mahchin.app.ui.viewmodel.MainViewModel
 
@@ -53,18 +56,21 @@ fun CalendarScreen(vm: MainViewModel) {
     val selectedDate by vm.selectedDate.collectAsState()
     val selectedTasks by vm.selectedDateTasks.collectAsState()
     val projects by vm.projects.collectAsState()
+    val mindMapNodes by vm.allMindMapNodes.collectAsState()
 
     var addDialog by remember { mutableStateOf(false) }
     var editTask by remember { mutableStateOf<TaskItem?>(null) }
     var moveTask by remember { mutableStateOf<TaskItem?>(null) }
     var alarmTask by remember { mutableStateOf<TaskItem?>(null) }
+    var moveGroupTasks by remember { mutableStateOf<List<TaskItem>?>(null) }
+    var alarmGroupTasks by remember { mutableStateOf<List<TaskItem>?>(null) }
     var clearDayDialog by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = vm::nextMonth, enabled = !(month.year == 1500 && month.month == 12)) { Text("بعدی") }
-            Text("${JalaliCalendar.monthName(month.month)} ${month.year.toPersianDigits()}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             OutlinedButton(onClick = vm::previousMonth, enabled = !(month.year == 1405 && month.month == 1)) { Text("قبلی") }
+            Text("${JalaliCalendar.monthName(month.month)} ${month.year.toPersianDigits()}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            OutlinedButton(onClick = vm::nextMonth, enabled = !(month.year == 1500 && month.month == 12)) { Text("بعدی") }
         }
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
@@ -85,20 +91,30 @@ fun CalendarScreen(vm: MainViewModel) {
         }
         Spacer(Modifier.height(8.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (selectedTasks.isEmpty()) item { Text("برای این تاریخ کاری وجود ندارد.") }
-            items(selectedTasks, key = { it.origin.name + it.id }) { task ->
-                TaskCard(
-                    task = task,
-                    onDone = { vm.toggleDone(task) },
-                    onEdit = { editTask = task },
-                    onDelete = { vm.deleteTask(task) },
-                    onMoveTomorrow = { vm.moveToTomorrow(task) },
-                    onMoveCustom = { moveTask = task },
-                    onCancel = { vm.cancelToday(task) },
-                    onInProgress = { vm.inProgress(task) },
-                    onReset = { vm.resetStatus(task) },
-                    onSetAlarm = { alarmTask = task }
-                )
+            if (selectedTasks.isEmpty()) {
+                item { Text("برای این تاریخ کاری وجود ندارد.") }
+            } else {
+                item {
+                    MindMapAwareTaskList(
+                        tasks = selectedTasks,
+                        mindMapNodes = mindMapNodes,
+                        onSetGroupStatus = { groupTasks, status -> vm.setTaskGroupStatus(groupTasks, status) },
+                        onDone = { task -> vm.toggleDone(task) },
+                        onEdit = { task -> editTask = task },
+                        onDelete = { task -> vm.deleteTask(task) },
+                        onMoveTomorrow = { task -> vm.moveToTomorrow(task) },
+                        onMoveCustom = { task -> moveTask = task },
+                        onCancel = { task -> vm.cancelToday(task) },
+                        onInProgress = { task -> vm.inProgress(task) },
+                        onReset = { task -> vm.resetStatus(task) },
+                        onSetAlarm = { task -> alarmTask = task },
+                        onBatchStatus = { groupTasks, status -> vm.setTaskGroupStatus(groupTasks, status) },
+                        onBatchDelete = { groupTasks -> vm.deleteTaskGroup(groupTasks) },
+                        onBatchMoveTomorrow = { groupTasks -> vm.moveTaskGroupToTomorrow(groupTasks) },
+                        onBatchMoveCustom = { groupTasks -> moveGroupTasks = groupTasks },
+                        onBatchAlarm = { groupTasks -> alarmGroupTasks = groupTasks }
+                    )
+                }
             }
         }
     }
@@ -162,6 +178,29 @@ fun CalendarScreen(vm: MainViewModel) {
             onSave = { date, hour, minute -> vm.setTaskAlarm(task, date, hour, minute); alarmTask = null }
         )
     }
+
+    moveGroupTasks?.let { groupTasks ->
+        JalaliDateDialog(
+            initialDate = selectedDate.plusDays(1),
+            onDismiss = { moveGroupTasks = null },
+            onSave = { date ->
+                vm.moveTaskGroupToCustomDate(groupTasks, date)
+                moveGroupTasks = null
+            }
+        )
+    }
+
+    alarmGroupTasks?.let { groupTasks ->
+        TaskAlarmDialog(
+            initialDate = selectedDate,
+            onDismiss = { alarmGroupTasks = null },
+            onClear = { alarmGroupTasks = null },
+            onSave = { date, hour, minute ->
+                vm.setTaskGroupAlarm(groupTasks, date, hour, minute)
+                alarmGroupTasks = null
+            }
+        )
+    }
 }
 
 @Composable
@@ -172,6 +211,7 @@ private fun MonthGrid(
     counts: Map<Int, Int>,
     onSelect: (JalaliDate) -> Unit
 ) {
+    val isDark = isSystemInDarkTheme()
     val offset = JalaliCalendar.firstDayOffsetSaturdayBased(year, month)
     val len = JalaliCalendar.monthLength(year, month)
     val cells = List(offset) { 0 } + (1..len).toList()
@@ -187,18 +227,20 @@ private fun MonthGrid(
             } else {
                 val isSelected = selectedDate.year == year && selectedDate.month == month && selectedDate.day == day
                 val count = counts[day] ?: 0
+                val dayColor = when {
+                    isSelected -> MaterialTheme.colorScheme.primaryContainer
+                    isDark -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
+                    else -> MaterialTheme.colorScheme.surface
+                }
                 Card(
                     modifier = Modifier
                         .aspectRatio(1f)
                         .clickable { onSelect(JalaliDate(year, month, day)) },
-                    shape = RoundedCornerShape(14.dp)
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = dayColor),
+                    border = if (!isDark) BorderStroke(0.8.dp, Color.Black.copy(alpha = 0.22f)) else BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.16f))
                 ) {
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface),
-                        contentAlignment = Alignment.Center
-                    ) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(day.toPersianDigits(), fontWeight = FontWeight.Bold)
                             if (count > 0) Text("${count.toPersianDigits()} کار", style = MaterialTheme.typography.labelSmall)

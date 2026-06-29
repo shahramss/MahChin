@@ -65,7 +65,9 @@ fun TaskCard(
     onInProgress: () -> Unit,
     onReset: (() -> Unit)? = null,
     onSetAlarm: (() -> Unit)? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    selected: Boolean = false,
+    onLongSelect: (() -> Unit)? = null
 ) {
     val closed = task.status.isClosed()
     var showActions by remember { mutableStateOf(false) }
@@ -89,18 +91,18 @@ fun TaskCard(
         modifier = modifier
             .fillMaxWidth()
             .combinedClickable(
-                onClick = { },
-                onLongClick = { showActions = true }
+                onClick = { if (selected) onLongSelect?.invoke() },
+                onLongClick = { if (onLongSelect != null) onLongSelect.invoke() else showActions = true }
             ),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (closed) {
-                MaterialTheme.colorScheme.surface.copy(alpha = 0.58f)
-            } else {
-                MaterialTheme.colorScheme.surface
+            containerColor = when {
+                selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                closed -> MaterialTheme.colorScheme.surface.copy(alpha = 0.58f)
+                else -> MaterialTheme.colorScheme.surface
             }
         ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.26f)),
+        border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.78f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.26f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(

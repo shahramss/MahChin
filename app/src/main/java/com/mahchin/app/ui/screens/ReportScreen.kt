@@ -32,9 +32,9 @@ fun ReportScreen(vm: MainViewModel) {
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("گزارش ماه", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            OutlinedButton(onClick = vm::nextMonth, enabled = !(month.year == 1500 && month.month == 12)) { Text("ماه بعد") }
-            Text("${JalaliCalendar.monthName(month.month)} ${month.year.toPersianDigits()}", style = MaterialTheme.typography.titleLarge)
             OutlinedButton(onClick = vm::previousMonth, enabled = !(month.year == 1405 && month.month == 1)) { Text("ماه قبل") }
+            Text("${JalaliCalendar.monthName(month.month)} ${month.year.toPersianDigits()}", style = MaterialTheme.typography.titleLarge)
+            OutlinedButton(onClick = vm::nextMonth, enabled = !(month.year == 1500 && month.month == 12)) { Text("ماه بعد") }
         }
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

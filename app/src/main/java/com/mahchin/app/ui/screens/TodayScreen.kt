@@ -61,6 +61,8 @@ fun TodayScreen(vm: MainViewModel) {
     var editTask by remember { mutableStateOf<TaskItem?>(null) }
     var moveTask by remember { mutableStateOf<TaskItem?>(null) }
     var alarmTask by remember { mutableStateOf<TaskItem?>(null) }
+    var moveGroupTasks by remember { mutableStateOf<List<TaskItem>?>(null) }
+    var alarmGroupTasks by remember { mutableStateOf<List<TaskItem>?>(null) }
 
     Box(
         modifier = Modifier
@@ -164,7 +166,12 @@ fun TodayScreen(vm: MainViewModel) {
                         onCancel = { task -> vm.cancelToday(task) },
                         onInProgress = { task -> vm.inProgress(task) },
                         onReset = { task -> vm.resetStatus(task) },
-                        onSetAlarm = { task -> alarmTask = task }
+                        onSetAlarm = { task -> alarmTask = task },
+                        onBatchStatus = { groupTasks, status -> vm.setTaskGroupStatus(groupTasks, status) },
+                        onBatchDelete = { groupTasks -> vm.deleteTaskGroup(groupTasks) },
+                        onBatchMoveTomorrow = { groupTasks -> vm.moveTaskGroupToTomorrow(groupTasks) },
+                        onBatchMoveCustom = { groupTasks -> moveGroupTasks = groupTasks },
+                        onBatchAlarm = { groupTasks -> alarmGroupTasks = groupTasks }
                     )
                 }
             }
@@ -240,4 +247,29 @@ fun TodayScreen(vm: MainViewModel) {
             }
         )
     }
+
+
+    moveGroupTasks?.let { groupTasks ->
+        JalaliDateDialog(
+            initialDate = today.plusDays(1),
+            onDismiss = { moveGroupTasks = null },
+            onSave = { date ->
+                vm.moveTaskGroupToCustomDate(groupTasks, date)
+                moveGroupTasks = null
+            }
+        )
+    }
+
+    alarmGroupTasks?.let { groupTasks ->
+        TaskAlarmDialog(
+            initialDate = today,
+            onDismiss = { alarmGroupTasks = null },
+            onClear = { alarmGroupTasks = null },
+            onSave = { date, hour, minute ->
+                vm.setTaskGroupAlarm(groupTasks, date, hour, minute)
+                alarmGroupTasks = null
+            }
+        )
+    }
+
 }
