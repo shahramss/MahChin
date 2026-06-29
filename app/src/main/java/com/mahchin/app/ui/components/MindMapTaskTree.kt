@@ -59,6 +59,11 @@ fun MindMapAwareTaskList(
     val activeNodes = remember(mindMapNodes) { mindMapNodes.filter { it.isActive } }
     val nodeMap = remember(activeNodes) { activeNodes.associateBy { it.id } }
     val children = remember(activeNodes) { activeNodes.groupBy { it.parentId } }
+    val rootOrder = remember(activeNodes) {
+        activeNodes
+            .filter { it.parentId == null }
+            .sortedWith(compareBy({ it.projectId }, { it.orderIndex }, { it.createdAt }))
+    }
     val expandableState = remember { mutableStateMapOf<String, Boolean>() }
     var selectedKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
 
@@ -95,6 +100,8 @@ fun MindMapAwareTaskList(
         val ownTask = taskByNode[node.id]
         val hasChildren = childNodes.isNotEmpty()
         val indent = ((level - 1).coerceAtLeast(0) * 12).dp
+        val nodeColor = mindMapTaskNodeColor(node, level, nodeMap, rootOrder)
+        val nodeBorderColor = nodeColor.darker(0.34f).copy(alpha = 0.64f)
 
         if (hasChildren) {
             val k = "node_${node.id}"
@@ -107,6 +114,8 @@ fun MindMapAwareTaskList(
                 level = level,
                 selected = groupTasks.any { key(it) in selectedKeys },
                 modifier = Modifier.padding(start = indent),
+                containerColor = nodeColor,
+                borderColor = nodeBorderColor,
                 onToggleExpand = { expandableState[k] = !expanded },
                 onToggleDone = { targetStatus -> onSetGroupStatus(groupTasks, targetStatus) },
                 onLongSelect = { setSelected(groupTasks) }
@@ -128,7 +137,9 @@ fun MindMapAwareTaskList(
                 onInProgress = { onInProgress(ownTask) },
                 onReset = { onReset(ownTask) },
                 onSetAlarm = { onSetAlarm(ownTask) },
-                modifier = Modifier.padding(start = indent + 8.dp)
+                modifier = Modifier.padding(start = indent + 8.dp),
+                containerOverride = nodeColor.copy(alpha = 0.58f),
+                borderOverride = nodeBorderColor.copy(alpha = 0.42f)
             )
         }
     }
@@ -190,6 +201,55 @@ fun MindMapAwareTaskList(
     }
 }
 
+private val mindTaskPalette = listOf(
+    Color(0xFFFF6B6B), Color(0xFFFF8E72), Color(0xFFFFA94D), Color(0xFFFFC857), Color(0xFFF4E04D),
+    Color(0xFFB8DE6F), Color(0xFF7ED957), Color(0xFF4ECDC4), Color(0xFF45B7D1), Color(0xFF5DADE2),
+    Color(0xFF74B9FF), Color(0xFF81ECEC), Color(0xFF55EFC4), Color(0xFFA3F7BF), Color(0xFFC7F464),
+    Color(0xFFFFF176), Color(0xFFFFD166), Color(0xFFFFB347), Color(0xFFFF9AA2), Color(0xFFFFB7B2),
+    Color(0xFFFFDAC1), Color(0xFFE2F0CB), Color(0xFFB5EAD7), Color(0xFFC7CEEA), Color(0xFFE0BBE4),
+    Color(0xFFD291BC), Color(0xFFFEC8D8), Color(0xFFFFDFD3), Color(0xFFA0E7E5), Color(0xFFB4F8C8),
+    Color(0xFFFBE7C6), Color(0xFFFFAEBC), Color(0xFFA0C4FF), Color(0xFFBDB2FF), Color(0xFFFFC6FF),
+    Color(0xFF9BF6FF), Color(0xFFCAFFBF), Color(0xFFFDFFB6), Color(0xFFFFD6A5), Color(0xFFFFADAD),
+    Color(0xFFE4C1F9), Color(0xFFD0F4DE), Color(0xFFA9DEF9), Color(0xFFEDE7B1), Color(0xFFFFC09F),
+    Color(0xFFCBF3F0), Color(0xFF2EC4B6), Color(0xFFFFBF69), Color(0xFFBDE0FE), Color(0xFFA2D2FF),
+    Color(0xFFFFC8DD), Color(0xFFD8E2DC), Color(0xFFFFF1E6), Color(0xFFE5989B), Color(0xFFB5838D),
+    Color(0xFF90DBF4), Color(0xFF98F5E1), Color(0xFFF9C74F), Color(0xFFF9844A), Color(0xFF8EECF5)
+)
+
+private fun mindMapTaskNodeColor(
+    node: MindMapNode,
+    level: Int,
+    nodeMap: Map<Long, MindMapNode>,
+    rootOrder: List<MindMapNode>
+): Color {
+    var root = node
+    while (root.parentId != null) {
+        root = nodeMap[root.parentId] ?: break
+    }
+    val projectRoots = rootOrder.filter { it.projectId == root.projectId }
+    val index = projectRoots.indexOfFirst { it.id == root.id }.let { if (it >= 0) it else rootOrder.indexOfFirst { r -> r.id == root.id } }.coerceAtLeast(0)
+    val base = mindTaskPalette[index % mindTaskPalette.size]
+    return when (level) {
+        1 -> base.darker(0.18f)
+        2 -> base.lighter(0.20f)
+        3 -> base.lighter(0.34f)
+        else -> base.lighter(0.46f)
+    }
+}
+
+private fun Color.lighter(amount: Float): Color = mixWith(Color.White, amount)
+private fun Color.darker(amount: Float): Color = mixWith(Color.Black, amount)
+
+private fun Color.mixWith(target: Color, amount: Float): Color {
+    val a = amount.coerceIn(0f, 1f)
+    return Color(
+        red = red + (target.red - red) * a,
+        green = green + (target.green - green) * a,
+        blue = blue + (target.blue - blue) * a,
+        alpha = alpha
+    )
+}
+
 @Composable
 private fun BatchActionBar(
     count: Int,
@@ -245,6 +305,8 @@ private fun ParentTaskAccordionCard(
     level: Int,
     selected: Boolean,
     modifier: Modifier = Modifier,
+    containerColor: Color,
+    borderColor: Color,
     onToggleExpand: () -> Unit,
     onToggleDone: (TaskStatus) -> Unit,
     onLongSelect: () -> Unit
@@ -257,19 +319,15 @@ private fun ParentTaskAccordionCard(
         else -> "○"
     }
     val target = if (allDone) TaskStatus.NOT_STARTED else TaskStatus.DONE
-    val baseColor = when (level) {
-        1 -> MaterialTheme.colorScheme.primaryContainer
-        2 -> MaterialTheme.colorScheme.tertiaryContainer
-        else -> MaterialTheme.colorScheme.secondaryContainer
-    }
+    val baseColor = containerColor
 
     Card(
         modifier = modifier
             .fillMaxWidth()
             .combinedClickable(onClick = onToggleExpand, onLongClick = onLongSelect),
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.20f) else baseColor.copy(alpha = 0.72f)),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = if (selected) 0.78f else 0.28f)),
+        colors = CardDefaults.cardColors(containerColor = if (selected) baseColor.darker(0.18f).copy(alpha = 0.88f) else baseColor.copy(alpha = 0.82f)),
+        border = BorderStroke(1.dp, if (selected) borderColor.copy(alpha = 0.90f) else borderColor.copy(alpha = 0.58f)),
         elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Row(
@@ -292,11 +350,11 @@ private fun ParentTaskAccordionCard(
                 Text(
                     text = title.toPersianDigits(),
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = Color.Black.copy(alpha = 0.90f),
                     textDecoration = if (allDone) TextDecoration.LineThrough else TextDecoration.None,
                     style = MaterialTheme.typography.titleMedium
                 )
-                Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                Text(subtitle, color = Color.Black.copy(alpha = 0.62f), style = MaterialTheme.typography.bodySmall)
             }
             Text(
                 text = if (expanded) "⌄" else "›",
@@ -360,7 +418,7 @@ private fun ProjectAccordionCard(
                 Text(
                     text = title.toPersianDigits(),
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = Color.Black.copy(alpha = 0.90f),
                     textDecoration = if (allDone) TextDecoration.LineThrough else TextDecoration.None,
                     style = MaterialTheme.typography.titleMedium
                 )

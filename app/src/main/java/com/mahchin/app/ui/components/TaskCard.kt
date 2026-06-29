@@ -67,7 +67,9 @@ fun TaskCard(
     onSetAlarm: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     selected: Boolean = false,
-    onLongSelect: (() -> Unit)? = null
+    onLongSelect: (() -> Unit)? = null,
+    containerOverride: Color? = null,
+    borderOverride: Color? = null
 ) {
     val closed = task.status.isClosed()
     var showActions by remember { mutableStateOf(false) }
@@ -98,11 +100,12 @@ fun TaskCard(
         colors = CardDefaults.cardColors(
             containerColor = when {
                 selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                containerOverride != null -> containerOverride
                 closed -> MaterialTheme.colorScheme.surface.copy(alpha = 0.58f)
                 else -> MaterialTheme.colorScheme.surface
             }
         ),
-        border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.78f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.26f)),
+        border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.78f) else borderOverride ?: MaterialTheme.colorScheme.outline.copy(alpha = 0.26f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
