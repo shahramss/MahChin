@@ -1282,7 +1282,7 @@ private fun android.graphics.Canvas.drawXMindRtlTextInsideNode(
 private fun safeBackupFileName(name: String): String {
     return name.trim()
         .ifBlank { "mindmap" }
-        .replace(Regex("[^A-Za-z0-9آ-یاآ-یءئؤژگچپ\-_]+"), "_")
+        .replace(Regex("""[^A-Za-z0-9آ-یءئؤژگچپ_-]+"""), "_")
         .take(42)
 }
 
