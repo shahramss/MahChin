@@ -229,7 +229,7 @@ private fun MonthGrid(
                 val count = counts[day] ?: 0
                 val dayColor = when {
                     isSelected -> MaterialTheme.colorScheme.primaryContainer
-                    isDark -> Color(0xFF223A56)
+                    isDark -> Color(0xFF355A82)
                     else -> MaterialTheme.colorScheme.surface
                 }
                 Card(
@@ -238,7 +238,7 @@ private fun MonthGrid(
                         .clickable { onSelect(JalaliDate(year, month, day)) },
                     shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(containerColor = dayColor),
-                    border = if (!isDark) BorderStroke(0.8.dp, Color.Black.copy(alpha = 0.22f)) else BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.16f))
+                    border = if (!isDark) BorderStroke(0.8.dp, Color.Black.copy(alpha = 0.22f)) else BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.30f))
                 ) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {

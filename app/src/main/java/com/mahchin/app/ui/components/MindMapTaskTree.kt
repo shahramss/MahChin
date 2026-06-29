@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -329,7 +330,7 @@ private fun ParentTaskAccordionCard(
             .fillMaxWidth()
             .combinedClickable(onClick = onToggleExpand, onLongClick = onLongSelect),
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = if (selected) baseColor.darker(0.18f).copy(alpha = 0.88f) else baseColor.copy(alpha = 0.82f)),
+        colors = CardDefaults.cardColors(containerColor = if (selected) baseColor.darker(0.14f) else baseColor),
         border = BorderStroke(1.dp, if (selected) borderColor.copy(alpha = 0.90f) else borderColor.copy(alpha = 0.58f)),
         elevation = CardDefaults.cardElevation(0.dp)
     ) {
@@ -345,7 +346,7 @@ private fun ParentTaskAccordionCard(
                 modifier = Modifier
                     .clickable(enabled = tasks.isNotEmpty()) { onToggleDone(target) }
                     .padding(horizontal = 4.dp),
-                color = if (allDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Color.Black.copy(alpha = if (allDone) 0.95f else 0.78f),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
@@ -361,7 +362,7 @@ private fun ParentTaskAccordionCard(
             }
             Text(
                 text = if (expanded) "⌄" else "›",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Color.Black.copy(alpha = 0.76f),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
@@ -390,6 +391,8 @@ private fun ProjectAccordionCard(
         else -> "○"
     }
     val target = if (allDone) TaskStatus.NOT_STARTED else TaskStatus.DONE
+    val isDarkTheme = isSystemInDarkTheme()
+    val projectTitleColor = if (isDarkTheme) Color.White else Color.Black
 
     Card(
         modifier = Modifier
@@ -421,7 +424,7 @@ private fun ProjectAccordionCard(
                 Text(
                     text = title.toPersianDigits(),
                     fontWeight = FontWeight.Bold,
-                    color = Color.Black.copy(alpha = 0.90f),
+                    color = projectTitleColor,
                     textDecoration = if (allDone) TextDecoration.LineThrough else TextDecoration.None,
                     style = MaterialTheme.typography.titleMedium
                 )

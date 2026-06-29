@@ -76,6 +76,11 @@ fun TaskCard(
     var showActions by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val isDark = isSystemInDarkTheme()
+    val forceBlackText = containerOverride != null && task.sourceMindMapNodeId != null
+    val mainTextColor = if (forceBlackText) Color.Black.copy(alpha = 0.96f) else MaterialTheme.colorScheme.onSurface
+    val secondaryTextColor = if (forceBlackText) Color.Black.copy(alpha = 0.72f) else MaterialTheme.colorScheme.onSurfaceVariant
+    val breadcrumbTextColor = if (forceBlackText) Color.Black.copy(alpha = 0.82f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.88f)
+    val iconTextColor = if (forceBlackText) Color.Black.copy(alpha = 0.78f) else MaterialTheme.colorScheme.onSurfaceVariant
 
     val statusColor = when (task.status) {
         TaskStatus.NOT_STARTED -> MaterialTheme.colorScheme.outline
@@ -103,13 +108,13 @@ fun TaskCard(
             containerColor = when {
                 selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
                 containerOverride != null -> containerOverride
-                closed && isDark -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.46f)
+                closed && isDark -> Color(0xFF1A2A3F)
                 closed -> MaterialTheme.colorScheme.surface.copy(alpha = 0.58f)
-                isDark -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.82f)
+                isDark -> Color(0xFF223A56)
                 else -> MaterialTheme.colorScheme.surface
             }
         ),
-        border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.78f) else borderOverride ?: MaterialTheme.colorScheme.outline.copy(alpha = if (isDark) 0.46f else 0.26f)),
+        border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.78f) else borderOverride ?: MaterialTheme.colorScheme.outline.copy(alpha = if (isDark) 0.68f else 0.26f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
@@ -126,7 +131,7 @@ fun TaskCard(
                 Icon(
                     imageVector = if (task.status == TaskStatus.DONE) Icons.Outlined.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
                     contentDescription = if (task.status == TaskStatus.DONE) "برداشتن تیک" else "انجام شد",
-                    tint = if (task.status == TaskStatus.DONE) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                    tint = if (forceBlackText) Color.Black.copy(alpha = if (task.status == TaskStatus.DONE) 0.94f else 0.64f) else if (task.status == TaskStatus.DONE) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                     modifier = Modifier.size(26.dp)
                 )
             }
@@ -146,13 +151,13 @@ fun TaskCard(
                             textDecoration = if (task.status == TaskStatus.DONE) TextDecoration.LineThrough else TextDecoration.None
                         ),
                         fontWeight = FontWeight.SemiBold,
-                        color = if (closed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+                        color = if (forceBlackText) mainTextColor else if (closed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
                     )
                     if (task.alarmAtMillis != null) {
-                        MiniPill("آلارم", Color(0xFF7DD3FC))
+                        MiniPill("آلارم", Color(0xFF7DD3FC), if (forceBlackText) Color.Black else null)
                     }
                     if (priorityText != null) {
-                        MiniPill(priorityText, if (task.priority == TaskPriority.URGENT) Color(0xFFFF6B6B) else Color(0xFFFFB454))
+                        MiniPill(priorityText, if (task.priority == TaskPriority.URGENT) Color(0xFFFF6B6B) else Color(0xFFFFB454), if (forceBlackText) Color.Black else null)
                     }
                 }
 
@@ -163,7 +168,7 @@ fun TaskCard(
                     Text(
                         text = breadcrumb,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.88f),
+                        color = breadcrumbTextColor,
                         maxLines = 2,
                         overflow = TextOverflow.Clip
                     )
@@ -173,7 +178,7 @@ fun TaskCard(
                         maxLines = 2,
                         overflow = TextOverflow.Clip,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = secondaryTextColor
                     )
                 }
 
@@ -182,14 +187,14 @@ fun TaskCard(
                     Text(
                         text = task.status.fa,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = secondaryTextColor,
                         maxLines = 1
                     )
-                    Text("•", color = MaterialTheme.colorScheme.outline)
+                    Text("•", color = if (forceBlackText) Color.Black.copy(alpha = 0.42f) else MaterialTheme.colorScheme.outline)
                     Text(
                         text = task.projectName ?: task.taskType.fa,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = secondaryTextColor,
                         maxLines = 1,
                         softWrap = false,
                         overflow = TextOverflow.Clip
@@ -201,7 +206,7 @@ fun TaskCard(
                 Icon(
                     Icons.Outlined.MoreVert,
                     contentDescription = "گزینه‌های تسک",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = iconTextColor
                 )
             }
         }
@@ -264,7 +269,7 @@ fun TaskCard(
 }
 
 @Composable
-private fun MiniPill(text: String, color: Color) {
+private fun MiniPill(text: String, color: Color, textColor: Color? = null) {
     Box(
         modifier = Modifier
             .background(color.copy(alpha = 0.14f), RoundedCornerShape(999.dp))
@@ -274,7 +279,7 @@ private fun MiniPill(text: String, color: Color) {
         Text(
             text = text,
             style = MaterialTheme.typography.labelSmall,
-            color = color,
+            color = textColor ?: color,
             fontWeight = FontWeight.Bold
         )
     }
