@@ -6,14 +6,18 @@ import com.mahchin.app.data.model.MindMapNode
 import com.mahchin.app.data.model.MonthlyTemplateTask
 import com.mahchin.app.data.model.OneTimeTask
 import com.mahchin.app.data.model.Project
+import com.mahchin.app.data.model.ReminderIntensity
 import com.mahchin.app.data.model.TaskItem
 import com.mahchin.app.data.model.TaskOrigin
 import com.mahchin.app.data.model.TaskPriority
 import com.mahchin.app.data.model.TaskStatus
+import com.mahchin.app.data.model.TaskType
 import com.mahchin.app.data.model.UserSettings
 import com.mahchin.app.domain.JalaliCalendar
 import com.mahchin.app.domain.JalaliDate
 import java.time.ZoneId
+import org.json.JSONArray
+import org.json.JSONObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -435,6 +439,298 @@ class TaskRepository(private val dao: TaskDao) {
             .atZone(ZoneId.systemDefault())
             .toInstant()
             .toEpochMilli()
+    }
+
+    suspend fun exportFullBackupJson(): String = withContext(Dispatchers.IO) {
+        JSONObject()
+            .put("type", "mahchin_full_backup")
+            .put("backupVersion", 1)
+            .put("exportedAt", System.currentTimeMillis())
+            .put("projects", JSONArray().apply { dao.getAllProjectsForBackup().forEach { put(it.toJson()) } })
+            .put("mindMapNodes", JSONArray().apply { dao.getAllMindMapNodesForBackup().forEach { put(it.toJson()) } })
+            .put("templates", JSONArray().apply { dao.getAllTemplatesForBackup().forEach { put(it.toJson()) } })
+            .put("dailyTasks", JSONArray().apply { dao.getAllDailyInstancesForBackup().forEach { put(it.toJson()) } })
+            .put("oneTimeTasks", JSONArray().apply { dao.getAllOneTimeTasksForBackup().forEach { put(it.toJson()) } })
+            .put("settings", (dao.getSettings() ?: UserSettings()).toJson())
+            .toString(2)
+    }
+
+    suspend fun restoreFullBackupJson(jsonText: String): Unit = withContext(Dispatchers.IO) {
+        val root = JSONObject(jsonText)
+        val type = root.optString("type")
+        require(type == "mahchin_full_backup") { "فایل بکاپ کامل ماه‌چین نیست." }
+
+        dao.hardDeleteAllDailyInstances()
+        dao.hardDeleteAllOneTimeTasks()
+        dao.hardDeleteAllTemplates()
+        dao.hardDeleteAllMindMapNodes()
+        dao.hardDeleteAllProjects()
+        dao.hardDeleteSettings()
+
+        root.optJSONArray("projects")?.forEachObject { dao.insertProject(it.toProject()) }
+        root.optJSONArray("mindMapNodes")?.forEachObject { dao.insertMindMapNode(it.toMindMapNode()) }
+        root.optJSONArray("templates")?.forEachObject { dao.insertTemplate(it.toMonthlyTemplateTask()) }
+        root.optJSONArray("dailyTasks")?.forEachObject { dao.upsertDailyInstanceForRestore(it.toDailyTaskInstance()) }
+        root.optJSONArray("oneTimeTasks")?.forEachObject { dao.insertOneTimeTask(it.toOneTimeTask()) }
+        root.optJSONObject("settings")?.let { dao.upsertSettings(it.toUserSettings()) }
+        if (dao.getProjects().isEmpty()) ensureDefaultProject()
+    }
+
+    suspend fun exportMindMapBackupJson(projectId: Long): String = withContext(Dispatchers.IO) {
+        val project = dao.getProject(projectId) ?: error("پروژه پیدا نشد.")
+        val nodes = dao.getMindMapNodes(projectId)
+        JSONObject()
+            .put("type", "mahchin_mindmap_backup")
+            .put("backupVersion", 1)
+            .put("exportedAt", System.currentTimeMillis())
+            .put("project", project.toJson())
+            .put("nodes", JSONArray().apply { nodes.forEach { put(it.toJson()) } })
+            .toString(2)
+    }
+
+    suspend fun restoreMindMapBackupJson(jsonText: String): Long = withContext(Dispatchers.IO) {
+        val root = JSONObject(jsonText)
+        val type = root.optString("type")
+        require(type == "mahchin_mindmap_backup") { "فایل بکاپ مایندمپ ماه‌چین نیست." }
+        val oldProject = root.getJSONObject("project").toProject()
+        val newProjectId = dao.insertProject(
+            Project(
+                name = oldProject.name.ifBlank { "مایندمپ بازیابی‌شده" },
+                colorHex = oldProject.colorHex,
+                createdAt = System.currentTimeMillis(),
+                updatedAt = System.currentTimeMillis(),
+                isActive = true
+            )
+        )
+        val nodeArray = root.optJSONArray("nodes") ?: JSONArray()
+        val oldNodes = mutableListOf<MindMapNode>()
+        nodeArray.forEachObject { oldNodes += it.toMindMapNode() }
+        val children = oldNodes.groupBy { it.parentId }
+        val idMap = mutableMapOf<Long, Long>()
+        suspend fun importBranch(node: MindMapNode) {
+            val newParentId = node.parentId?.let { idMap[it] }
+            val newId = dao.insertMindMapNode(
+                node.copy(
+                    id = 0,
+                    projectId = newProjectId,
+                    parentId = newParentId,
+                    createdAt = System.currentTimeMillis(),
+                    updatedAt = System.currentTimeMillis(),
+                    isActive = true
+                )
+            )
+            idMap[node.id] = newId
+            children[node.id].orEmpty()
+                .sortedWith(compareBy({ it.orderIndex }, { it.createdAt }, { it.id }))
+                .forEach { importBranch(it) }
+        }
+        children[null].orEmpty()
+            .sortedWith(compareBy({ it.orderIndex }, { it.createdAt }, { it.id }))
+            .forEach { importBranch(it) }
+        newProjectId
+    }
+
+    private fun Project.toJson(): JSONObject = JSONObject()
+        .put("id", id)
+        .put("name", name)
+        .put("colorHex", colorHex)
+        .put("createdAt", createdAt)
+        .put("updatedAt", updatedAt)
+        .put("isActive", isActive)
+
+    private fun MindMapNode.toJson(): JSONObject = JSONObject()
+        .put("id", id)
+        .put("projectId", projectId)
+        .putNullable("parentId", parentId)
+        .put("title", title)
+        .put("description", description)
+        .put("orderIndex", orderIndex)
+        .putNullable("x", x)
+        .putNullable("y", y)
+        .put("createdAt", createdAt)
+        .put("updatedAt", updatedAt)
+        .put("isActive", isActive)
+
+    private fun MonthlyTemplateTask.toJson(): JSONObject = JSONObject()
+        .put("id", id)
+        .putNullable("projectId", projectId)
+        .putNullable("sourceMindMapNodeId", sourceMindMapNodeId)
+        .put("title", title)
+        .put("description", description)
+        .put("dayOfMonth", dayOfMonth)
+        .putNullable("jalaliYear", jalaliYear)
+        .putNullable("jalaliMonth", jalaliMonth)
+        .putNullable("jalaliDay", jalaliDay)
+        .put("taskType", taskType.name)
+        .put("status", status.name)
+        .put("priority", priority.name)
+        .putNullable("alarmHour", alarmHour)
+        .putNullable("alarmMinute", alarmMinute)
+        .put("createdAt", createdAt)
+        .put("updatedAt", updatedAt)
+        .putNullable("movedFromDate", movedFromDate)
+        .putNullable("movedToDate", movedToDate)
+        .put("isActive", isActive)
+
+    private fun DailyTaskInstance.toJson(): JSONObject = JSONObject()
+        .put("id", id)
+        .putNullable("sourceTemplateId", sourceTemplateId)
+        .putNullable("projectId", projectId)
+        .putNullable("sourceMindMapNodeId", sourceMindMapNodeId)
+        .put("title", title)
+        .put("description", description)
+        .put("dayOfMonth", dayOfMonth)
+        .put("jalaliYear", jalaliYear)
+        .put("jalaliMonth", jalaliMonth)
+        .put("jalaliDay", jalaliDay)
+        .put("taskType", taskType.name)
+        .put("status", status.name)
+        .put("priority", priority.name)
+        .putNullable("alarmAtMillis", alarmAtMillis)
+        .put("createdAt", createdAt)
+        .put("updatedAt", updatedAt)
+        .putNullable("movedFromDate", movedFromDate)
+        .putNullable("movedToDate", movedToDate)
+
+    private fun OneTimeTask.toJson(): JSONObject = JSONObject()
+        .put("id", id)
+        .putNullable("projectId", projectId)
+        .putNullable("sourceMindMapNodeId", sourceMindMapNodeId)
+        .put("title", title)
+        .put("description", description)
+        .put("dayOfMonth", dayOfMonth)
+        .put("jalaliYear", jalaliYear)
+        .put("jalaliMonth", jalaliMonth)
+        .put("jalaliDay", jalaliDay)
+        .put("taskType", taskType.name)
+        .put("status", status.name)
+        .put("priority", priority.name)
+        .putNullable("alarmAtMillis", alarmAtMillis)
+        .put("createdAt", createdAt)
+        .put("updatedAt", updatedAt)
+        .putNullable("movedFromDate", movedFromDate)
+        .putNullable("movedToDate", movedToDate)
+
+    private fun UserSettings.toJson(): JSONObject = JSONObject()
+        .put("id", id)
+        .put("reminderIntensity", reminderIntensity.name)
+        .put("startHour", startHour)
+        .put("endHour", endHour)
+        .put("soundEnabled", soundEnabled)
+        .put("vibrationEnabled", vibrationEnabled)
+        .put("darkMode", darkMode)
+        .put("backupEnabled", backupEnabled)
+        .put("updatedAt", updatedAt)
+
+    private fun JSONObject.toProject(): Project = Project(
+        id = optLong("id", 0L),
+        name = optString("name", "عمومی"),
+        colorHex = optString("colorHex", "#2DD4BF"),
+        createdAt = optLong("createdAt", System.currentTimeMillis()),
+        updatedAt = optLong("updatedAt", System.currentTimeMillis()),
+        isActive = optBoolean("isActive", true)
+    )
+
+    private fun JSONObject.toMindMapNode(): MindMapNode = MindMapNode(
+        id = optLong("id", 0L),
+        projectId = optLong("projectId", 0L),
+        parentId = longOrNull("parentId"),
+        title = optString("title", "گره"),
+        description = optString("description", ""),
+        orderIndex = optInt("orderIndex", 0),
+        x = floatOrNull("x"),
+        y = floatOrNull("y"),
+        createdAt = optLong("createdAt", System.currentTimeMillis()),
+        updatedAt = optLong("updatedAt", System.currentTimeMillis()),
+        isActive = optBoolean("isActive", true)
+    )
+
+    private fun JSONObject.toMonthlyTemplateTask(): MonthlyTemplateTask = MonthlyTemplateTask(
+        id = optLong("id", 0L),
+        projectId = longOrNull("projectId"),
+        sourceMindMapNodeId = longOrNull("sourceMindMapNodeId"),
+        title = optString("title", "تسک"),
+        description = optString("description", ""),
+        dayOfMonth = optInt("dayOfMonth", 1),
+        jalaliYear = intOrNull("jalaliYear"),
+        jalaliMonth = intOrNull("jalaliMonth"),
+        jalaliDay = intOrNull("jalaliDay"),
+        taskType = enumOrDefault("taskType", TaskType.MONTHLY_TEMPLATE),
+        status = enumOrDefault("status", TaskStatus.NOT_STARTED),
+        priority = enumOrDefault("priority", TaskPriority.NORMAL),
+        alarmHour = intOrNull("alarmHour"),
+        alarmMinute = intOrNull("alarmMinute"),
+        createdAt = optLong("createdAt", System.currentTimeMillis()),
+        updatedAt = optLong("updatedAt", System.currentTimeMillis()),
+        movedFromDate = stringOrNull("movedFromDate"),
+        movedToDate = stringOrNull("movedToDate"),
+        isActive = optBoolean("isActive", true)
+    )
+
+    private fun JSONObject.toDailyTaskInstance(): DailyTaskInstance = DailyTaskInstance(
+        id = optLong("id", 0L),
+        sourceTemplateId = longOrNull("sourceTemplateId"),
+        projectId = longOrNull("projectId"),
+        sourceMindMapNodeId = longOrNull("sourceMindMapNodeId"),
+        title = optString("title", "تسک"),
+        description = optString("description", ""),
+        dayOfMonth = optInt("dayOfMonth", 1),
+        jalaliYear = optInt("jalaliYear", 1405),
+        jalaliMonth = optInt("jalaliMonth", 1),
+        jalaliDay = optInt("jalaliDay", dayOfMonth()),
+        taskType = enumOrDefault("taskType", TaskType.DAILY_FROM_TEMPLATE),
+        status = enumOrDefault("status", TaskStatus.NOT_STARTED),
+        priority = enumOrDefault("priority", TaskPriority.NORMAL),
+        alarmAtMillis = longOrNull("alarmAtMillis"),
+        createdAt = optLong("createdAt", System.currentTimeMillis()),
+        updatedAt = optLong("updatedAt", System.currentTimeMillis()),
+        movedFromDate = stringOrNull("movedFromDate"),
+        movedToDate = stringOrNull("movedToDate")
+    )
+
+    private fun JSONObject.toOneTimeTask(): OneTimeTask = OneTimeTask(
+        id = optLong("id", 0L),
+        projectId = longOrNull("projectId"),
+        sourceMindMapNodeId = longOrNull("sourceMindMapNodeId"),
+        title = optString("title", "تسک"),
+        description = optString("description", ""),
+        dayOfMonth = optInt("dayOfMonth", 1),
+        jalaliYear = optInt("jalaliYear", 1405),
+        jalaliMonth = optInt("jalaliMonth", 1),
+        jalaliDay = optInt("jalaliDay", dayOfMonth()),
+        taskType = enumOrDefault("taskType", TaskType.ONE_TIME),
+        status = enumOrDefault("status", TaskStatus.NOT_STARTED),
+        priority = enumOrDefault("priority", TaskPriority.NORMAL),
+        alarmAtMillis = longOrNull("alarmAtMillis"),
+        createdAt = optLong("createdAt", System.currentTimeMillis()),
+        updatedAt = optLong("updatedAt", System.currentTimeMillis()),
+        movedFromDate = stringOrNull("movedFromDate"),
+        movedToDate = stringOrNull("movedToDate")
+    )
+
+    private fun JSONObject.toUserSettings(): UserSettings = UserSettings(
+        id = optInt("id", 1),
+        reminderIntensity = enumOrDefault("reminderIntensity", ReminderIntensity.SERIOUS),
+        startHour = optInt("startHour", 8),
+        endHour = optInt("endHour", 22),
+        soundEnabled = optBoolean("soundEnabled", false),
+        vibrationEnabled = optBoolean("vibrationEnabled", false),
+        darkMode = optBoolean("darkMode", true),
+        backupEnabled = optBoolean("backupEnabled", true),
+        updatedAt = optLong("updatedAt", System.currentTimeMillis())
+    )
+
+    private fun JSONObject.putNullable(name: String, value: Any?): JSONObject = put(name, value ?: JSONObject.NULL)
+    private fun JSONObject.longOrNull(name: String): Long? = if (isNull(name)) null else optLong(name)
+    private fun JSONObject.intOrNull(name: String): Int? = if (isNull(name)) null else optInt(name)
+    private fun JSONObject.floatOrNull(name: String): Float? = if (isNull(name)) null else optDouble(name).toFloat()
+    private fun JSONObject.stringOrNull(name: String): String? = if (isNull(name)) null else optString(name)
+    private fun JSONObject.dayOfMonth(): Int = optInt("dayOfMonth", optInt("jalaliDay", 1))
+    private inline fun <reified T : Enum<T>> JSONObject.enumOrDefault(name: String, defaultValue: T): T =
+        runCatching { enumValueOf<T>(optString(name, defaultValue.name)) }.getOrDefault(defaultValue)
+
+    private inline fun JSONArray.forEachObject(block: (JSONObject) -> Unit) {
+        for (i in 0 until length()) optJSONObject(i)?.let(block)
     }
 
     private fun DailyTaskInstance.toItem(projects: Map<Long, Project>, nodes: Map<Long, MindMapNode>): TaskItem = TaskItem(

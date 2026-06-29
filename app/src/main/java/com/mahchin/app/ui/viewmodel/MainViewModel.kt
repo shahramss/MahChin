@@ -1,6 +1,8 @@
 package com.mahchin.app.ui.viewmodel
 
 import android.app.Application
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -394,6 +396,77 @@ class MainViewModel(
         } else {
             "مجوز نوتیفیکیشن فعال نیست. از تنظیمات گوشی اجازه Notification را بده."
         }
+    }
+
+
+    fun exportFullBackupToUri(context: Context, uri: Uri?) {
+        if (uri == null) return
+        viewModelScope.launch {
+            runCatching {
+                val json = repository.exportFullBackupJson()
+                context.contentResolver.openOutputStream(uri)?.use { out ->
+                    out.write(json.toByteArray(Charsets.UTF_8))
+                } ?: error("فایل باز نشد")
+            }.onSuccess {
+                _settingsMessage.value = "بکاپ کامل ذخیره شد."
+            }.onFailure {
+                _settingsMessage.value = "خطا در ذخیره بکاپ: ${it.message ?: "نامشخص"}"
+            }
+        }
+    }
+
+    fun restoreFullBackupFromUri(context: Context, uri: Uri?) {
+        if (uri == null) return
+        viewModelScope.launch {
+            runCatching {
+                val json = context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                    ?: error("فایل خوانده نشد")
+                repository.restoreFullBackupJson(json)
+                val firstProject = repository.ensureDefaultProject()
+                _selectedProjectId.value = firstProject
+                rescheduleTaskAlarms()
+            }.onSuccess {
+                _settingsMessage.value = "بکاپ کامل بازگردانی شد."
+            }.onFailure {
+                _settingsMessage.value = "خطا در بازگردانی بکاپ: ${it.message ?: "نامشخص"}"
+            }
+        }
+    }
+
+    fun exportMindMapBackupToUri(context: Context, uri: Uri?, projectId: Long) {
+        if (uri == null) return
+        viewModelScope.launch {
+            runCatching {
+                val json = repository.exportMindMapBackupJson(projectId)
+                context.contentResolver.openOutputStream(uri)?.use { out ->
+                    out.write(json.toByteArray(Charsets.UTF_8))
+                } ?: error("فایل باز نشد")
+            }.onSuccess {
+                _settingsMessage.value = "بکاپ مایندمپ ذخیره شد."
+            }.onFailure {
+                _settingsMessage.value = "خطا در بکاپ مایندمپ: ${it.message ?: "نامشخص"}"
+            }
+        }
+    }
+
+    fun restoreMindMapBackupFromUri(context: Context, uri: Uri?) {
+        if (uri == null) return
+        viewModelScope.launch {
+            runCatching {
+                val json = context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                    ?: error("فایل خوانده نشد")
+                val newProjectId = repository.restoreMindMapBackupJson(json)
+                _selectedProjectId.value = newProjectId
+            }.onSuccess {
+                _settingsMessage.value = "مایندمپ بازگردانی شد."
+            }.onFailure {
+                _settingsMessage.value = "خطا در بازگردانی مایندمپ: ${it.message ?: "نامشخص"}"
+            }
+        }
+    }
+
+    fun showMessage(message: String) {
+        _settingsMessage.value = message
     }
 
     fun clearSettingsMessage() {

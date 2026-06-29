@@ -31,6 +31,12 @@ interface TaskDao {
     @Query("SELECT * FROM projects WHERE id = :id LIMIT 1")
     suspend fun getProject(id: Long): Project?
 
+    @Query("SELECT * FROM projects ORDER BY id ASC")
+    suspend fun getAllProjectsForBackup(): List<Project>
+
+    @Query("DELETE FROM projects")
+    suspend fun hardDeleteAllProjects()
+
     @Query("SELECT COUNT(*) FROM projects WHERE isActive = 1")
     suspend fun activeProjectCount(): Int
 
@@ -55,6 +61,12 @@ interface TaskDao {
     @Query("SELECT * FROM mind_map_nodes WHERE id = :id LIMIT 1")
     suspend fun getMindMapNode(id: Long): MindMapNode?
 
+    @Query("SELECT * FROM mind_map_nodes ORDER BY projectId ASC, parentId ASC, orderIndex ASC, createdAt ASC")
+    suspend fun getAllMindMapNodesForBackup(): List<MindMapNode>
+
+    @Query("DELETE FROM mind_map_nodes")
+    suspend fun hardDeleteAllMindMapNodes()
+
     @Query("UPDATE mind_map_nodes SET x = :x, y = :y, updatedAt = :updatedAt WHERE id = :id")
     suspend fun updateMindMapNodePosition(id: Long, x: Float, y: Float, updatedAt: Long = System.currentTimeMillis())
 
@@ -76,8 +88,17 @@ interface TaskDao {
     @Query("SELECT * FROM monthly_template_tasks WHERE id = :id LIMIT 1")
     suspend fun getTemplate(id: Long): MonthlyTemplateTask?
 
+    @Query("SELECT * FROM monthly_template_tasks ORDER BY id ASC")
+    suspend fun getAllTemplatesForBackup(): List<MonthlyTemplateTask>
+
+    @Query("DELETE FROM monthly_template_tasks")
+    suspend fun hardDeleteAllTemplates()
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertDailyInstance(task: DailyTaskInstance): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertDailyInstanceForRestore(task: DailyTaskInstance): Long
 
     @Update
     suspend fun updateDailyInstance(task: DailyTaskInstance)
@@ -93,6 +114,12 @@ interface TaskDao {
 
     @Query("SELECT * FROM daily_task_instances WHERE id = :id LIMIT 1")
     suspend fun getDailyInstance(id: Long): DailyTaskInstance?
+
+    @Query("SELECT * FROM daily_task_instances ORDER BY id ASC")
+    suspend fun getAllDailyInstancesForBackup(): List<DailyTaskInstance>
+
+    @Query("DELETE FROM daily_task_instances")
+    suspend fun hardDeleteAllDailyInstances()
 
     @Query("SELECT * FROM daily_task_instances WHERE sourceTemplateId = :sourceTemplateId AND jalaliYear = :year AND jalaliMonth = :month AND jalaliDay = :day LIMIT 1")
     suspend fun getDailyInstanceBySource(sourceTemplateId: Long, year: Int, month: Int, day: Int): DailyTaskInstance?
@@ -123,6 +150,12 @@ interface TaskDao {
 
     @Query("SELECT * FROM one_time_tasks WHERE id = :id LIMIT 1")
     suspend fun getOneTimeTask(id: Long): OneTimeTask?
+
+    @Query("SELECT * FROM one_time_tasks ORDER BY id ASC")
+    suspend fun getAllOneTimeTasksForBackup(): List<OneTimeTask>
+
+    @Query("DELETE FROM one_time_tasks")
+    suspend fun hardDeleteAllOneTimeTasks()
 
     @Query("SELECT * FROM one_time_tasks WHERE alarmAtMillis IS NOT NULL AND alarmAtMillis >= :now")
     suspend fun getFutureOneTimeTasksWithAlarms(now: Long): List<OneTimeTask>
@@ -157,6 +190,9 @@ interface TaskDao {
 
     @Query("SELECT * FROM user_settings WHERE id = 1 LIMIT 1")
     suspend fun getSettings(): UserSettings?
+
+    @Query("DELETE FROM user_settings")
+    suspend fun hardDeleteSettings()
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertSettings(settings: UserSettings)

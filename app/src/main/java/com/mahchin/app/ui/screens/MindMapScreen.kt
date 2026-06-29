@@ -1,14 +1,27 @@
 package com.mahchin.app.ui.screens
 
+import android.content.ContentValues
+import android.content.Context
+import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.Paint
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
+import android.graphics.RectF
+import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
 import android.text.TextDirectionHeuristics
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -33,6 +46,10 @@ import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.FileUpload
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -71,6 +88,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -101,6 +119,7 @@ fun MindMapScreen(vm: MainViewModel) {
     val nodes by vm.mindMapNodes.collectAsState()
     val allMindMapNodes by vm.allMindMapNodes.collectAsState()
     val selectedProject = projects.firstOrNull { it.id == selectedProjectId } ?: projects.firstOrNull()
+    val context = LocalContext.current
 
     var projectMenu by remember { mutableStateOf(false) }
     var addProjectDialog by remember { mutableStateOf(false) }
@@ -115,6 +134,17 @@ fun MindMapScreen(vm: MainViewModel) {
     var openedProjectId by remember { mutableStateOf<Long?>(null) }
     var projectSearch by remember { mutableStateOf("") }
     var deleteProjectTarget by remember { mutableStateOf<Project?>(null) }
+    var projectListActionsTarget by remember { mutableStateOf<Project?>(null) }
+    var pendingMindMapBackupProject by remember { mutableStateOf<Project?>(null) }
+    val mindMapBackupLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        pendingMindMapBackupProject?.let { project -> vm.exportMindMapBackupToUri(context, uri, project.id) }
+        pendingMindMapBackupProject = null
+    }
+    val mindMapRestoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        vm.restoreMindMapBackupFromUri(context, uri)
+        openedProjectId = null
+        selectedNodeId = null
+    }
     val selectedNode = nodes.firstOrNull { it.id == selectedNodeId && it.isActive }
     val openedProject = projects.firstOrNull { it.id == openedProjectId } ?: selectedProject
 
@@ -135,6 +165,7 @@ fun MindMapScreen(vm: MainViewModel) {
                     selectedNodeId = null
                     openedProjectId = project.id
                 },
+                onProjectLongPress = { project -> projectListActionsTarget = project },
                 onDeleteProject = { project -> deleteProjectTarget = project }
             )
         } else {
@@ -281,7 +312,7 @@ fun MindMapScreen(vm: MainViewModel) {
     if (projectActions) {
         MindMapActionSheet(
             title = selectedProject?.name ?: "پروژه",
-            subtitle = "مدیریت پروژه‌ها؛ اضافه، ویرایش یا حذف پروژه فعلی.",
+            subtitle = "مدیریت پروژه فعلی؛ بدون گزینه‌های بکاپ و تصویر برای جلوگیری از شلوغی صفحه مایندمپ.",
             onDismiss = { projectActions = false },
             actions = listOf(
                 MindAction("افزودن پروژه", Icons.Outlined.Add) {
@@ -309,6 +340,48 @@ fun MindMapScreen(vm: MainViewModel) {
                 MindAction("افزودن شاخه اصلی", Icons.Outlined.Add) {
                     centerActions = false
                     nodeDialog = NodeDialogState(parentId = null)
+                }
+            )
+        )
+    }
+
+    projectListActionsTarget?.let { project ->
+        val projectNodes = allMindMapNodes.filter { it.projectId == project.id && it.isActive }
+        MindMapActionSheet(
+            title = project.name,
+            subtitle = "گزینه‌های این مایندمپ؛ تصویر، اشتراک، بکاپ، بازگردانی یا حذف.",
+            onDismiss = { projectListActionsTarget = null },
+            actions = listOf(
+                MindAction("ذخیره تصویر مایندمپ در گالری", Icons.Outlined.Image) {
+                    projectListActionsTarget = null
+                    runCatching {
+                        saveMindMapImageToGallery(context, project.name, projectNodes)
+                    }.onSuccess {
+                        Toast.makeText(context, "تصویر مایندمپ در گالری ذخیره شد.", Toast.LENGTH_SHORT).show()
+                    }.onFailure {
+                        Toast.makeText(context, "خطا در ذخیره تصویر: ${it.message ?: "نامشخص"}", Toast.LENGTH_LONG).show()
+                    }
+                },
+                MindAction("اشتراک تصویر مایندمپ", Icons.Outlined.Share) {
+                    projectListActionsTarget = null
+                    runCatching {
+                        shareMindMapImage(context, project.name, projectNodes)
+                    }.onFailure {
+                        Toast.makeText(context, "خطا در اشتراک تصویر: ${it.message ?: "نامشخص"}", Toast.LENGTH_LONG).show()
+                    }
+                },
+                MindAction("بکاپ این مایندمپ", Icons.Outlined.FileDownload) {
+                    projectListActionsTarget = null
+                    pendingMindMapBackupProject = project
+                    mindMapBackupLauncher.launch("mahchin_mindmap_${safeBackupFileName(project.name)}.json")
+                },
+                MindAction("بازگردانی بکاپ مایندمپ", Icons.Outlined.FileUpload) {
+                    projectListActionsTarget = null
+                    mindMapRestoreLauncher.launch(arrayOf("application/json", "text/*", "application/octet-stream"))
+                },
+                MindAction("حذف", Icons.Outlined.Delete, danger = true) {
+                    projectListActionsTarget = null
+                    deleteProjectTarget = project
                 }
             )
         )
@@ -344,6 +417,7 @@ fun MindMapScreen(vm: MainViewModel) {
 }
 
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MindMapProjectListScreen(
     projects: List<Project>,
@@ -352,6 +426,7 @@ private fun MindMapProjectListScreen(
     onSearchChange: (String) -> Unit,
     onAddProject: () -> Unit,
     onOpenProject: (Project) -> Unit,
+    onProjectLongPress: (Project) -> Unit,
     onDeleteProject: (Project) -> Unit
 ) {
     val activeNodes = allNodes.filter { it.isActive }
@@ -418,7 +493,10 @@ private fun MindMapProjectListScreen(
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onOpenProject(project) },
+                        .combinedClickable(
+                            onClick = { onOpenProject(project) },
+                            onLongClick = { onProjectLongPress(project) }
+                        ),
                     shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)),
@@ -1198,6 +1276,142 @@ private fun android.graphics.Canvas.drawXMindRtlTextInsideNode(
     translate(left, y)
     layout.draw(this)
     restore()
+}
+
+
+private fun safeBackupFileName(name: String): String {
+    return name.trim()
+        .ifBlank { "mindmap" }
+        .replace(Regex("[^A-Za-z0-9آ-یاآ-یءئؤژگچپ\-_]+"), "_")
+        .take(42)
+}
+
+private fun saveMindMapImageToGallery(context: Context, projectTitle: String, nodes: List<MindMapNode>): Uri {
+    val bitmap = renderMindMapBitmap(projectTitle, nodes)
+    val fileName = "mahchin_mindmap_${safeBackupFileName(projectTitle)}_${System.currentTimeMillis()}.png"
+    val values = ContentValues().apply {
+        put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
+        put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/MahChin")
+            put(MediaStore.Images.Media.IS_PENDING, 1)
+        }
+    }
+    val resolver = context.contentResolver
+    val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+        ?: error("امکان ساخت فایل تصویر وجود ندارد")
+    resolver.openOutputStream(uri)?.use { out ->
+        if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)) error("ذخیره تصویر ناموفق بود")
+    } ?: error("فایل تصویر باز نشد")
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        values.clear()
+        values.put(MediaStore.Images.Media.IS_PENDING, 0)
+        resolver.update(uri, values, null, null)
+    }
+    return uri
+}
+
+private fun shareMindMapImage(context: Context, projectTitle: String, nodes: List<MindMapNode>) {
+    val uri = saveMindMapImageToGallery(context, projectTitle, nodes)
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "image/png"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(Intent.createChooser(intent, "اشتراک تصویر مایندمپ"))
+}
+
+private fun renderMindMapBitmap(projectTitle: String, nodes: List<MindMapNode>): Bitmap {
+    val pixelScale = 2f
+    val graph = buildXMindGraph(
+        projectTitle = projectTitle,
+        allNodes = nodes,
+        selectedNodeId = null,
+        primary = Color(0xFF2DD4BF),
+        onPrimary = Color.Black,
+        onSurface = Color.Black,
+        pixelScale = pixelScale,
+        manualPositions = emptyMap()
+    )
+    val margin = 220f * pixelScale
+    val nodeBounds = graph.nodes.flatMap { node ->
+        listOf(
+            Offset(node.center.x - node.width / 2f, node.center.y - node.height / 2f),
+            Offset(node.center.x + node.width / 2f, node.center.y + node.height / 2f)
+        )
+    }
+    val lineBounds = graph.lines.flatMap { listOf(it.from, it.to) }
+    val allPoints = (nodeBounds + lineBounds).ifEmpty { listOf(Offset.Zero) }
+    val minX = allPoints.minOf { it.x } - margin
+    val maxX = allPoints.maxOf { it.x } + margin
+    val minY = allPoints.minOf { it.y } - margin
+    val maxY = allPoints.maxOf { it.y } + margin
+    val rawW = (maxX - minX).coerceAtLeast(900f)
+    val rawH = (maxY - minY).coerceAtLeast(900f)
+    val fitScale = min(1f, min(12000f / rawW, 12000f / rawH)).coerceAtLeast(0.18f)
+    val width = (rawW * fitScale).toInt().coerceAtLeast(900)
+    val height = (rawH * fitScale).toInt().coerceAtLeast(900)
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(bitmap)
+    val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(7, 19, 33) }
+    canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
+
+    fun sx(x: Float): Float = (x - minX) * fitScale
+    fun sy(y: Float): Float = (y - minY) * fitScale
+
+    graph.lines.forEach { line ->
+        val start = Offset(sx(line.from.x), sy(line.from.y))
+        val end = Offset(sx(line.to.x), sy(line.to.y))
+        val side = if (end.x >= start.x) 1f else -1f
+        val dx = abs(end.x - start.x)
+        val control = dx.coerceIn(90f * fitScale, 260f * fitScale)
+        val path = android.graphics.Path().apply {
+            moveTo(start.x, start.y)
+            cubicTo(start.x + side * control, start.y, end.x - side * control, end.y, end.x, end.y)
+        }
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = line.color.copy(alpha = 0.90f).toArgb()
+            style = Paint.Style.STROKE
+            strokeWidth = (if (line.side == 0) 4.2f else 3.4f) * fitScale
+        }
+        canvas.drawPath(path, paint)
+    }
+
+    graph.nodes.forEach { node ->
+        val cx = sx(node.center.x)
+        val cy = sy(node.center.y)
+        val nodeW = node.width * fitScale
+        val nodeH = node.height * fitScale
+        val left = cx - nodeW / 2f
+        val top = cy - nodeH / 2f
+        val right = cx + nodeW / 2f
+        val bottom = cy + nodeH / 2f
+        val radiusValue = when (node.level) { 0 -> 24f; 1 -> 20f; else -> 18f } * fitScale
+        val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.argb(if (node.level == 0) 62 else 34, 0, 0, 0) }
+        canvas.drawRoundRect(RectF(left, top + 7f * fitScale, right, bottom + 7f * fitScale), radiusValue, radiusValue, shadowPaint)
+        val fill = when (node.level) {
+            0 -> Color.White
+            1 -> node.color.copy(alpha = 0.99f)
+            2 -> node.color.copy(alpha = 0.94f)
+            else -> node.color.copy(alpha = 0.88f)
+        }
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = fill.toArgb(); style = Paint.Style.FILL }
+        canvas.drawRoundRect(RectF(left, top, right, bottom), radiusValue, radiusValue, fillPaint)
+        val padX = node.horizontalPadding * pixelScale * fitScale
+        val padY = node.verticalPadding * pixelScale * fitScale
+        canvas.drawXMindRtlTextInsideNode(
+            text = node.title,
+            level = node.level,
+            left = left + padX,
+            top = top + padY,
+            right = right - padX,
+            bottom = bottom - padY,
+            color = node.textColor.toArgb(),
+            textSize = node.fontSize * pixelScale * fitScale,
+            bold = node.level <= 1
+        )
+    }
+    return bitmap
 }
 
 private data class MindAction(

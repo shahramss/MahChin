@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -391,7 +392,7 @@ private fun ProjectAccordionCard(
         else -> "○"
     }
     val target = if (allDone) TaskStatus.NOT_STARTED else TaskStatus.DONE
-    val isDarkTheme = isSystemInDarkTheme()
+    val isDarkTheme = MaterialTheme.colorScheme.background.luminance() < 0.50f
     val projectTitleColor = if (isDarkTheme) Color.White else Color.Black
 
     Card(

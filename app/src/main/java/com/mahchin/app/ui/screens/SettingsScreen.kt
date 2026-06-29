@@ -1,5 +1,7 @@
 package com.mahchin.app.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -37,6 +39,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -55,6 +58,13 @@ fun SettingsScreen(vm: MainViewModel) {
     var startHour by remember(settings.startHour) { mutableStateOf(settings.startHour.toString()) }
     var endHour by remember(settings.endHour) { mutableStateOf(settings.endHour.toString()) }
     var confirmClear by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    val fullBackupLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        vm.exportFullBackupToUri(context, uri)
+    }
+    val fullRestoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        vm.restoreFullBackupFromUri(context, uri)
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
@@ -150,6 +160,33 @@ fun SettingsScreen(vm: MainViewModel) {
         item { SettingSwitch("فعال‌سازی ویبره", settings.vibrationEnabled) { checked -> vm.updateSettings { it.copy(vibrationEnabled = checked) } } }
         item { SettingSwitch("حالت تاریک", settings.darkMode) { checked -> vm.updateSettings { it.copy(darkMode = checked) } } }
         item { SettingSwitch("بکاپ خودکار اندروید", settings.backupEnabled) { checked -> vm.updateSettings { it.copy(backupEnabled = checked) } } }
+
+        item {
+            Card(
+                Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)),
+                elevation = CardDefaults.cardElevation(0.dp)
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("بکاپ و بازگردانی کامل", fontWeight = FontWeight.Bold)
+                    Text(
+                        "تمام تسک‌ها، قالب‌ها، مایندمپ‌ها، پروژه‌ها و تنظیمات در یک فایل ذخیره می‌شود.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Button(
+                        onClick = { fullBackupLauncher.launch("mahchin_full_backup_${System.currentTimeMillis()}.json") },
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) { Text("گرفتن بکاپ کامل") }
+                    OutlinedButton(
+                        onClick = { fullRestoreLauncher.launch(arrayOf("application/json", "text/*", "application/octet-stream")) },
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) { Text("بازگردانی بکاپ کامل") }
+                }
+            }
+        }
 
         item {
             Card(
