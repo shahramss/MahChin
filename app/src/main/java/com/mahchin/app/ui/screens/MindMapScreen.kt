@@ -166,7 +166,8 @@ fun MindMapScreen(vm: MainViewModel) {
                     openedProjectId = project.id
                 },
                 onProjectLongPress = { project -> projectListActionsTarget = project },
-                onDeleteProject = { project -> deleteProjectTarget = project }
+                onDeleteProject = { project -> deleteProjectTarget = project },
+                onRestoreBackup = { mindMapRestoreLauncher.launch(arrayOf("application/json", "text/*", "application/octet-stream")) }
             )
         } else {
             Column(
@@ -349,7 +350,7 @@ fun MindMapScreen(vm: MainViewModel) {
         val projectNodes = allMindMapNodes.filter { it.projectId == project.id && it.isActive }
         MindMapActionSheet(
             title = project.name,
-            subtitle = "گزینه‌های این مایندمپ؛ تصویر، اشتراک، بکاپ، بازگردانی یا حذف.",
+            subtitle = "گزینه‌های این مایندمپ؛ تصویر، اشتراک، بکاپ یا حذف.",
             onDismiss = { projectListActionsTarget = null },
             actions = listOf(
                 MindAction("ذخیره تصویر مایندمپ در گالری", Icons.Outlined.Image) {
@@ -374,10 +375,6 @@ fun MindMapScreen(vm: MainViewModel) {
                     projectListActionsTarget = null
                     pendingMindMapBackupProject = project
                     mindMapBackupLauncher.launch("mahchin_mindmap_${safeBackupFileName(project.name)}.json")
-                },
-                MindAction("بازگردانی بکاپ مایندمپ", Icons.Outlined.FileUpload) {
-                    projectListActionsTarget = null
-                    mindMapRestoreLauncher.launch(arrayOf("application/json", "text/*", "application/octet-stream"))
                 },
                 MindAction("حذف", Icons.Outlined.Delete, danger = true) {
                     projectListActionsTarget = null
@@ -427,7 +424,8 @@ private fun MindMapProjectListScreen(
     onAddProject: () -> Unit,
     onOpenProject: (Project) -> Unit,
     onProjectLongPress: (Project) -> Unit,
-    onDeleteProject: (Project) -> Unit
+    onDeleteProject: (Project) -> Unit,
+    onRestoreBackup: () -> Unit
 ) {
     val activeNodes = allNodes.filter { it.isActive }
     val nodeCountByProject = activeNodes.groupingBy { it.projectId }.eachCount()
@@ -439,7 +437,18 @@ private fun MindMapProjectListScreen(
             projects.filter { project ->
                 project.name.contains(q, ignoreCase = true) ||
                     activeNodes.any { it.projectId == project.id && it.title.contains(q, ignoreCase = true) }
-            }
+            }.sortedWith(
+                compareBy<Project> { project ->
+                    when {
+                        project.name.equals(q, ignoreCase = true) -> 0
+                        project.name.startsWith(q, ignoreCase = true) -> 1
+                        project.name.contains(q, ignoreCase = true) -> 2
+                        activeNodes.any { it.projectId == project.id && it.title.equals(q, ignoreCase = true) } -> 3
+                        activeNodes.any { it.projectId == project.id && it.title.startsWith(q, ignoreCase = true) } -> 4
+                        else -> 5
+                    }
+                }.thenByDescending { it.updatedAt }
+            )
         }
     }
 
@@ -462,11 +471,6 @@ private fun MindMapProjectListScreen(
                     style = MaterialTheme.typography.bodySmall
                 )
             }
-            Button(
-                onClick = onAddProject,
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.height(44.dp)
-            ) { Text("پروژه جدید") }
         }
 
         OutlinedTextField(
@@ -478,6 +482,19 @@ private fun MindMapProjectListScreen(
             placeholder = { Text("نام پروژه یا عنوان نود") }
         )
 
+        OutlinedButton(
+            onClick = onRestoreBackup,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp),
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.65f))
+        ) {
+            Icon(Icons.Outlined.FileUpload, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("بازگردانی بکاپ مایندمپ")
+        }
+
         Text(
             "${filteredProjects.size.toPersianDigits()} پروژه از ${projects.size.toPersianDigits()} پروژه",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -485,7 +502,9 @@ private fun MindMapProjectListScreen(
         )
 
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(filteredProjects, key = { it.id }) { project ->
@@ -533,6 +552,18 @@ private fun MindMapProjectListScreen(
                     }
                 }
             }
+        }
+
+        Button(
+            onClick = onAddProject,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(58.dp),
+            shape = RoundedCornerShape(22.dp)
+        ) {
+            Icon(Icons.Outlined.Add, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("ساخت مایندمپ جدید", fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -731,7 +762,7 @@ private fun XMindLikeCanvasCard(
 
                     if (graphNode.selected) {
                         drawRoundRect(
-                            color = Color(0xFF32F1E5).copy(alpha = 0.90f),
+                            color = Color(0xFFFFD166).copy(alpha = 0.90f),
                             topLeft = topLeft - Offset(5f * scale, 5f * scale),
                             size = Size(nodeW + 10f * scale, nodeH + 10f * scale),
                             cornerRadius = CornerRadius(radiusValue + 5f * scale, radiusValue + 5f * scale),
@@ -802,7 +833,7 @@ private fun XMindLikeCanvasCard(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(18.dp),
                         colors = CardDefaults.cardColors(containerColor = Color(0xFF0C3C3B).copy(alpha = 0.92f)),
-                        border = BorderStroke(1.dp, Color(0xFF2EE6D6).copy(alpha = 0.55f)),
+                        border = BorderStroke(1.dp, Color(0xFFD4AF37).copy(alpha = 0.55f)),
                         elevation = CardDefaults.cardElevation(0.dp)
                     ) {
                         Column(
@@ -1327,7 +1358,7 @@ private fun renderMindMapBitmap(projectTitle: String, nodes: List<MindMapNode>):
         projectTitle = projectTitle,
         allNodes = nodes,
         selectedNodeId = null,
-        primary = Color(0xFF2DD4BF),
+        primary = Color(0xFFD4AF37),
         onPrimary = Color.Black,
         onSurface = Color.Black,
         pixelScale = pixelScale,

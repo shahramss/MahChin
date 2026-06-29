@@ -7,7 +7,7 @@ import androidx.room.PrimaryKey
 data class Project(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
-    val colorHex: String = "#2DD4BF",
+    val colorHex: String = "#D4AF37",
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val isActive: Boolean = true

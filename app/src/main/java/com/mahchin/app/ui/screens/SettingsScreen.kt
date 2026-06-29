@@ -44,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.mahchin.app.BuildConfig
 import com.mahchin.app.data.model.ReminderIntensity
 import com.mahchin.app.domain.toEnglishDigits
 import com.mahchin.app.domain.toPersianDigits
@@ -218,6 +219,26 @@ fun SettingsScreen(vm: MainViewModel) {
                 "برای اینکه یادآوری‌ها در بعضی گوشی‌ها بهتر کار کند، در تنظیمات گوشی Battery Optimization را برای ماه‌چین محدود نکن.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+
+        item {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    "ساخته شده توسط وب تیما",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "نسخه ${BuildConfig.VERSION_NAME}".toPersianDigits(),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
         }
     }
 

@@ -625,7 +625,7 @@ class TaskRepository(private val dao: TaskDao) {
     private fun JSONObject.toProject(): Project = Project(
         id = optLong("id", 0L),
         name = optString("name", "عمومی"),
-        colorHex = optString("colorHex", "#2DD4BF"),
+        colorHex = optString("colorHex", "#D4AF37"),
         createdAt = optLong("createdAt", System.currentTimeMillis()),
         updatedAt = optLong("updatedAt", System.currentTimeMillis()),
         isActive = optBoolean("isActive", true)
