@@ -1,3 +1,14 @@
+// حذف خودکار آیکون‌های قدیمی که ممکن است داخل ریپوی GitHub مانده باشند و باعث Duplicate resources شوند.
+listOf(
+    "src/main/res/drawable/ic_launcher.png",
+    "src/main/res/drawable/ic_launcher.webp",
+    "src/main/res/drawable/ic_launcher.jpg",
+    "src/main/res/drawable/ic_launcher.jpeg"
+).forEach { legacyLauncherPath ->
+    val legacyLauncherFile = file(legacyLauncherPath)
+    if (legacyLauncherFile.exists()) legacyLauncherFile.delete()
+}
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -12,8 +23,8 @@ android {
         applicationId = "com.mahchin.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 54
-        versionName = "1.20.3"
+        versionCode = 55
+        versionName = "1.20.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
