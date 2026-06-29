@@ -81,10 +81,20 @@ fun MindMapAwareTaskList(
     val normalTasks = tasks.filterNot { it.sourceMindMapNodeId != null && nodeMap.containsKey(it.sourceMindMapNodeId) }
     val taskByNode = mindTasks.mapNotNull { t -> t.sourceMindMapNodeId?.let { it to t } }.toMap()
 
+    fun nodeHasChildren(node: MindMapNode): Boolean = children[node.id].orEmpty().any { it.isActive }
+
+    fun sortedMindNodes(list: List<MindMapNode>): List<MindMapNode> = list
+        .filter { it.isActive }
+        .sortedWith(
+            compareByDescending<MindMapNode> { nodeHasChildren(it) }
+                .thenBy { it.orderIndex }
+                .thenBy { it.createdAt }
+        )
+
     fun subtreeTasks(node: MindMapNode): List<TaskItem> {
         val result = mutableListOf<TaskItem>()
         taskByNode[node.id]?.let { result += it }
-        children[node.id].orEmpty().sortedWith(compareBy({ it.orderIndex }, { it.createdAt })).forEach { child ->
+        sortedMindNodes(children[node.id].orEmpty()).forEach { child ->
             result += subtreeTasks(child)
         }
         return result
@@ -94,8 +104,7 @@ fun MindMapAwareTaskList(
     fun RenderNode(node: MindMapNode, level: Int) {
         val groupTasks = subtreeTasks(node)
         if (groupTasks.isEmpty()) return
-        val childNodes = children[node.id].orEmpty()
-            .sortedWith(compareBy({ it.orderIndex }, { it.createdAt }))
+        val childNodes = sortedMindNodes(children[node.id].orEmpty())
             .filter { subtreeTasks(it).isNotEmpty() }
         val ownTask = taskByNode[node.id]
         val hasChildren = childNodes.isNotEmpty()
@@ -138,8 +147,8 @@ fun MindMapAwareTaskList(
                 onReset = { onReset(ownTask) },
                 onSetAlarm = { onSetAlarm(ownTask) },
                 modifier = Modifier.padding(start = indent + 8.dp),
-                containerOverride = nodeColor.copy(alpha = 0.58f),
-                borderOverride = nodeBorderColor.copy(alpha = 0.42f)
+                containerOverride = nodeColor,
+                borderOverride = nodeBorderColor.copy(alpha = 0.64f)
             )
         }
     }
@@ -192,9 +201,8 @@ fun MindMapAwareTaskList(
                 onLongSelect = { setSelected(projectTasks) }
             )
             if (expanded) {
-                val rootNodes = children[null].orEmpty()
+                val rootNodes = sortedMindNodes(children[null].orEmpty())
                     .filter { it.projectId == projectId && subtreeTasks(it).isNotEmpty() }
-                    .sortedWith(compareBy({ it.orderIndex }, { it.createdAt }))
                 rootNodes.forEach { root -> RenderNode(root, 1) }
             }
         }
@@ -229,12 +237,7 @@ private fun mindMapTaskNodeColor(
     val projectRoots = rootOrder.filter { it.projectId == root.projectId }
     val index = projectRoots.indexOfFirst { it.id == root.id }.let { if (it >= 0) it else rootOrder.indexOfFirst { r -> r.id == root.id } }.coerceAtLeast(0)
     val base = mindTaskPalette[index % mindTaskPalette.size]
-    return when (level) {
-        1 -> base.darker(0.18f)
-        2 -> base.lighter(0.20f)
-        3 -> base.lighter(0.34f)
-        else -> base.lighter(0.46f)
-    }
+    return base.darker(0.18f)
 }
 
 private fun Color.lighter(amount: Float): Color = mixWith(Color.White, amount)

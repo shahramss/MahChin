@@ -380,13 +380,23 @@ class TaskRepository(private val dao: TaskDao) {
 
     private fun orderedAllMindMapNodes(roots: List<MindMapNode>, children: Map<Long?, List<MindMapNode>>): List<MindMapNode> {
         val result = mutableListOf<MindMapNode>()
+
+        fun hasChildren(node: MindMapNode): Boolean = children[node.id].orEmpty().any { it.isActive }
+
+        fun sortedNodes(list: List<MindMapNode>): List<MindMapNode> = list
+            .filter { it.isActive }
+            .sortedWith(
+                compareByDescending<MindMapNode> { hasChildren(it) }
+                    .thenBy { it.orderIndex }
+                    .thenBy { it.createdAt }
+            )
+
         fun visit(node: MindMapNode) {
             result += node
-            children[node.id].orEmpty()
-                .sortedWith(compareBy({ it.orderIndex }, { it.createdAt }))
-                .forEach { visit(it) }
+            sortedNodes(children[node.id].orEmpty()).forEach { visit(it) }
         }
-        roots.sortedWith(compareBy({ it.orderIndex }, { it.createdAt })).forEach { visit(it) }
+
+        sortedNodes(roots).forEach { visit(it) }
         return result
     }
 

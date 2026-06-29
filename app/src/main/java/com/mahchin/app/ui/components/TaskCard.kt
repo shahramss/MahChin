@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -74,6 +75,7 @@ fun TaskCard(
     val closed = task.status.isClosed()
     var showActions by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val isDark = isSystemInDarkTheme()
 
     val statusColor = when (task.status) {
         TaskStatus.NOT_STARTED -> MaterialTheme.colorScheme.outline
@@ -101,11 +103,13 @@ fun TaskCard(
             containerColor = when {
                 selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
                 containerOverride != null -> containerOverride
+                closed && isDark -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.46f)
                 closed -> MaterialTheme.colorScheme.surface.copy(alpha = 0.58f)
+                isDark -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.82f)
                 else -> MaterialTheme.colorScheme.surface
             }
         ),
-        border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.78f) else borderOverride ?: MaterialTheme.colorScheme.outline.copy(alpha = 0.26f)),
+        border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.78f) else borderOverride ?: MaterialTheme.colorScheme.outline.copy(alpha = if (isDark) 0.46f else 0.26f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(

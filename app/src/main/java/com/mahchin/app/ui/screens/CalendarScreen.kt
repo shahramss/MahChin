@@ -229,7 +229,7 @@ private fun MonthGrid(
                 val count = counts[day] ?: 0
                 val dayColor = when {
                     isSelected -> MaterialTheme.colorScheme.primaryContainer
-                    isDark -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f)
+                    isDark -> Color(0xFF223A56)
                     else -> MaterialTheme.colorScheme.surface
                 }
                 Card(
