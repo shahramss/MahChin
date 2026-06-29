@@ -356,9 +356,8 @@ class TaskRepository(private val dao: TaskDao) {
         if (nodes.isEmpty()) return@withContext 0
         val nodeMap = nodes.associateBy { it.id }
         val children = nodes.groupBy { it.parentId }
-        val taskNodes = orderedLeafNodes(children[null].orEmpty(), children).ifEmpty { nodes.filter { it.parentId != null } }
-        val projectName = dao.getProject(projectId)?.name ?: "پروژه"
-        val perDay = tasksPerDay.coerceIn(1, 20)
+        val taskNodes = orderedAllMindMapNodes(children[null].orEmpty(), children).ifEmpty { nodes }
+        val perDay = if (tasksPerDay >= 9999) taskNodes.size.coerceAtLeast(1) else tasksPerDay.coerceAtLeast(1)
         taskNodes.forEachIndexed { index, node ->
             val date = startDate.plusDays((index / perDay).toLong())
             val path = buildMindMapPath(node.id, nodeMap)
@@ -379,23 +378,26 @@ class TaskRepository(private val dao: TaskDao) {
         taskNodes.size
     }
 
-    private fun orderedLeafNodes(roots: List<MindMapNode>, children: Map<Long?, List<MindMapNode>>): List<MindMapNode> {
+    private fun orderedAllMindMapNodes(roots: List<MindMapNode>, children: Map<Long?, List<MindMapNode>>): List<MindMapNode> {
         val result = mutableListOf<MindMapNode>()
         fun visit(node: MindMapNode) {
-            val childList = children[node.id].orEmpty()
-            if (childList.isEmpty()) {
-                result += node
-            } else {
-                childList.forEach { visit(it) }
-            }
+            result += node
+            children[node.id].orEmpty()
+                .sortedWith(compareBy({ it.orderIndex }, { it.createdAt }))
+                .forEach { visit(it) }
         }
-        roots.forEach { visit(it) }
+        roots.sortedWith(compareBy({ it.orderIndex }, { it.createdAt })).forEach { visit(it) }
         return result
     }
 
 
     suspend fun clearTasksForDate(date: JalaliDate) = withContext(Dispatchers.IO) {
         dao.deleteDailyInstancesForDate(date.year, date.month, date.day)
+        dao.deleteOneTimeTasksForDate(date.year, date.month, date.day)
+    }
+
+    suspend fun clearNonTemplateTasksForDate(date: JalaliDate) = withContext(Dispatchers.IO) {
+        dao.deleteNonTemplateDailyInstancesForDate(date.year, date.month, date.day)
         dao.deleteOneTimeTasksForDate(date.year, date.month, date.day)
     }
 

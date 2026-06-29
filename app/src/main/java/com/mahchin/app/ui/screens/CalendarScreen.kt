@@ -18,12 +18,14 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -56,6 +58,7 @@ fun CalendarScreen(vm: MainViewModel) {
     var editTask by remember { mutableStateOf<TaskItem?>(null) }
     var moveTask by remember { mutableStateOf<TaskItem?>(null) }
     var alarmTask by remember { mutableStateOf<TaskItem?>(null) }
+    var clearDayDialog by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -75,7 +78,10 @@ fun CalendarScreen(vm: MainViewModel) {
                 Text("برنامه ${selectedDate.display}", fontWeight = FontWeight.Bold)
                 AssistChip(onClick = {}, label = { Text("${selectedTasks.size.toPersianDigits()} تسک") })
             }
-            Button(onClick = { addDialog = true }) { Text("تسک اختصاصی") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(onClick = { clearDayDialog = true }, enabled = selectedTasks.isNotEmpty()) { Text("پاک‌سازی روز") }
+                Button(onClick = { addDialog = true }) { Text("تسک اختصاصی") }
+            }
         }
         Spacer(Modifier.height(8.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -95,6 +101,21 @@ fun CalendarScreen(vm: MainViewModel) {
                 )
             }
         }
+    }
+
+    if (clearDayDialog) {
+        AlertDialog(
+            onDismissRequest = { clearDayDialog = false },
+            title = { Text("پاک کردن تسک‌های این روز") },
+            text = { Text("همه تسک‌های همین روز به‌جز تسک‌های قالب تکرارشونده پاک شوند؟") },
+            confirmButton = {
+                Button(onClick = {
+                    vm.clearNonTemplateTasksForDate(selectedDate)
+                    clearDayDialog = false
+                }) { Text("پاک کن") }
+            },
+            dismissButton = { TextButton(onClick = { clearDayDialog = false }) { Text("انصراف") } }
+        )
     }
 
     if (addDialog) {

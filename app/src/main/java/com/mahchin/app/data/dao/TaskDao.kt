@@ -137,6 +137,9 @@ interface TaskDao {
     @Query("DELETE FROM daily_task_instances WHERE jalaliYear = :year AND jalaliMonth = :month AND jalaliDay = :day")
     suspend fun deleteDailyInstancesForDate(year: Int, month: Int, day: Int)
 
+    @Query("DELETE FROM daily_task_instances WHERE sourceTemplateId IS NULL AND jalaliYear = :year AND jalaliMonth = :month AND jalaliDay = :day")
+    suspend fun deleteNonTemplateDailyInstancesForDate(year: Int, month: Int, day: Int)
+
     @Query("DELETE FROM one_time_tasks WHERE jalaliYear = :year AND jalaliMonth = :month AND jalaliDay = :day")
     suspend fun deleteOneTimeTasksForDate(year: Int, month: Int, day: Int)
 

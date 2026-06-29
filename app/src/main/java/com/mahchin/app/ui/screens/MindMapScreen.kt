@@ -24,9 +24,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
@@ -41,6 +44,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -49,6 +53,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -73,6 +78,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mahchin.app.data.model.MindMapNode
+import com.mahchin.app.data.model.Project
 import com.mahchin.app.domain.JalaliCalendar
 import com.mahchin.app.domain.JalaliDate
 import com.mahchin.app.domain.toEnglishDigits
@@ -93,6 +99,7 @@ fun MindMapScreen(vm: MainViewModel) {
     val projects by vm.projects.collectAsState()
     val selectedProjectId by vm.selectedProjectId.collectAsState()
     val nodes by vm.mindMapNodes.collectAsState()
+    val allMindMapNodes by vm.allMindMapNodes.collectAsState()
     val selectedProject = projects.firstOrNull { it.id == selectedProjectId } ?: projects.firstOrNull()
 
     var projectMenu by remember { mutableStateOf(false) }
@@ -105,104 +112,99 @@ fun MindMapScreen(vm: MainViewModel) {
     var actionNode by remember { mutableStateOf<MindMapNode?>(null) }
     var centerActions by remember { mutableStateOf(false) }
     var selectedNodeId by remember(selectedProjectId) { mutableStateOf<Long?>(null) }
+    var openedProjectId by remember { mutableStateOf<Long?>(null) }
+    var projectSearch by remember { mutableStateOf("") }
+    var deleteProjectTarget by remember { mutableStateOf<Project?>(null) }
     val selectedNode = nodes.firstOrNull { it.id == selectedNodeId && it.isActive }
+    val openedProject = projects.firstOrNull { it.id == openedProjectId } ?: selectedProject
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("مایندمپ", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text(
-                        "طراحی تازه شبیه XMind؛ نودهای خوانا، فونت بزرگ، چیدمان دوطرفه و بدون تداخل.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-                OutlinedButton(
-                    onClick = { distributeDialog = true },
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.height(44.dp)
-                ) { Text("تسک‌سازی") }
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                ExposedDropdownMenuBox(
-                    expanded = projectMenu,
-                    onExpandedChange = { projectMenu = !projectMenu },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    OutlinedTextField(
-                        value = selectedProject?.name ?: "پروژه",
-                        onValueChange = {},
-                        readOnly = true,
-                        singleLine = true,
-                        label = { Text("پروژه") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(projectMenu) },
-                        modifier = Modifier.menuAnchor().fillMaxWidth()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = projectMenu,
-                        onDismissRequest = { projectMenu = false }
-                    ) {
-                        projects.forEach { project ->
-                            DropdownMenuItem(
-                                text = { Text(project.name) },
-                                onClick = {
-                                    vm.selectProject(project.id)
-                                    selectedNodeId = null
-                                    projectMenu = false
-                                }
-                            )
-                        }
-                    }
-                }
-                OutlinedButton(
-                    onClick = { projectActions = true },
-                    modifier = Modifier.height(56.dp),
-                    shape = RoundedCornerShape(16.dp)
-                ) { Text("پروژه", maxLines = 1, softWrap = false) }
-            }
-
-            XMindLikeCanvasCard(
-                projectTitle = selectedProject?.name ?: "پروژه",
-                nodes = nodes,
-                selectedNodeId = selectedNodeId,
+        if (openedProjectId == null) {
+            MindMapProjectListScreen(
+                projects = projects,
+                allNodes = allMindMapNodes,
+                searchQuery = projectSearch,
+                onSearchChange = { projectSearch = it },
+                onAddProject = { addProjectDialog = true },
+                onOpenProject = { project ->
+                    vm.selectProject(project.id)
+                    selectedNodeId = null
+                    openedProjectId = project.id
+                },
+                onDeleteProject = { project -> deleteProjectTarget = project }
+            )
+        } else {
+            Column(
                 modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    IconButton(onClick = {
+                        openedProjectId = null
+                        selectedNodeId = null
+                    }) {
+                        Icon(Icons.Outlined.ArrowBack, contentDescription = "بازگشت")
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(openedProject?.name ?: "مایندمپ", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            "فضای اختصاصی نقشه ذهنی؛ افزودن شاخه، زیرشاخه، زوم و تسک‌سازی.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = { projectActions = true },
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.height(44.dp)
+                    ) { Text("پروژه") }
+                    OutlinedButton(
+                        onClick = { distributeDialog = true },
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.height(44.dp)
+                    ) { Text("تسک‌سازی") }
+                }
+
+                XMindLikeCanvasCard(
+                    projectTitle = openedProject?.name ?: "پروژه",
+                    nodes = nodes,
+                    selectedNodeId = selectedNodeId,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    onNodeTap = { node -> selectedNodeId = node.id },
+                    onCenterTap = { selectedNodeId = null },
+                    onNodeLongPress = { actionNode = it },
+                    onCenterLongPress = { centerActions = true },
+                    onEmptyTap = { selectedNodeId = null },
+                    onNodeMove = { node, x, y -> vm.moveMindMapNode(node.id, x, y) }
+                )
+            }
+
+            MindMapBottomBar(
+                selectedNode = selectedNode,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .weight(1f),
-                onNodeTap = { node -> selectedNodeId = node.id },
-                onCenterTap = { selectedNodeId = null },
-                onNodeLongPress = { actionNode = it },
-                onCenterLongPress = { centerActions = true },
-                onEmptyTap = { selectedNodeId = null },
-                onNodeMove = { node, x, y -> vm.moveMindMapNode(node.id, x, y) }
+                    .padding(12.dp),
+                onAddRoot = { nodeDialog = NodeDialogState(parentId = null) },
+                onAddChild = { selectedNode?.let { nodeDialog = NodeDialogState(parentId = it.id) } },
+                onEditSelected = { selectedNode?.let { nodeDialog = NodeDialogState(editNode = it, parentId = it.parentId) } },
+                onDistribute = { distributeDialog = true }
             )
         }
-
-        MindMapBottomBar(
-            selectedNode = selectedNode,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(12.dp),
-            onAddRoot = { nodeDialog = NodeDialogState(parentId = null) },
-            onAddChild = { selectedNode?.let { nodeDialog = NodeDialogState(parentId = it.id) } },
-            onEditSelected = { selectedNode?.let { nodeDialog = NodeDialogState(editNode = it, parentId = it.parentId) } },
-            onDistribute = { distributeDialog = true }
-        )
     }
 
     if (addProjectDialog) {
@@ -230,22 +232,23 @@ fun MindMapScreen(vm: MainViewModel) {
         )
     }
 
-    if (deleteProjectDialog && selectedProject != null) {
+    deleteProjectTarget?.let { project ->
         AlertDialog(
-            onDismissRequest = { deleteProjectDialog = false },
+            onDismissRequest = { deleteProjectTarget = null },
             title = { Text("حذف پروژه") },
-            text = { Text("پروژه «${selectedProject.name}» حذف شود؟ اگر تنها پروژه باشد حذف نمی‌شود.") },
+            text = { Text("آیا می‌خواهید مایندمپ «${project.name}» حذف شود؟") },
             confirmButton = {
                 Button(
                     onClick = {
-                        vm.deleteProject(selectedProject.id)
+                        vm.deleteProject(project.id)
+                        if (openedProjectId == project.id) openedProjectId = null
                         selectedNodeId = null
-                        deleteProjectDialog = false
+                        deleteProjectTarget = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5C5C))
                 ) { Text("حذف") }
             },
-            dismissButton = { TextButton(onClick = { deleteProjectDialog = false }) { Text("انصراف") } }
+            dismissButton = { TextButton(onClick = { deleteProjectTarget = null }) { Text("انصراف") } }
         )
     }
 
@@ -291,7 +294,7 @@ fun MindMapScreen(vm: MainViewModel) {
                 },
                 MindAction("حذف پروژه فعلی", Icons.Outlined.Delete, danger = true) {
                     projectActions = false
-                    deleteProjectDialog = selectedProject != null
+                    deleteProjectTarget = openedProject ?: selectedProject
                 }
             )
         )
@@ -340,6 +343,122 @@ fun MindMapScreen(vm: MainViewModel) {
     }
 }
 
+
+@Composable
+private fun MindMapProjectListScreen(
+    projects: List<Project>,
+    allNodes: List<MindMapNode>,
+    searchQuery: String,
+    onSearchChange: (String) -> Unit,
+    onAddProject: () -> Unit,
+    onOpenProject: (Project) -> Unit,
+    onDeleteProject: (Project) -> Unit
+) {
+    val activeNodes = allNodes.filter { it.isActive }
+    val nodeCountByProject = activeNodes.groupingBy { it.projectId }.eachCount()
+    val filteredProjects = remember(projects, activeNodes, searchQuery) {
+        val q = searchQuery.trim()
+        if (q.isBlank()) {
+            projects
+        } else {
+            projects.filter { project ->
+                project.name.contains(q, ignoreCase = true) ||
+                    activeNodes.any { it.projectId == project.id && it.title.contains(q, ignoreCase = true) }
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("مایندمپ‌ها", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(
+                    "لیست پروژه‌های مایندمپ؛ جستجو کن یا روی هر پروژه بزن تا وارد نقشه شوی.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            Button(
+                onClick = onAddProject,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.height(44.dp)
+            ) { Text("پروژه جدید") }
+        }
+
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = onSearchChange,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("جستجو در مایندمپ‌ها") },
+            placeholder = { Text("نام پروژه یا عنوان نود") }
+        )
+
+        Text(
+            "${filteredProjects.size.toPersianDigits()} پروژه از ${projects.size.toPersianDigits()} پروژه",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall
+        )
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(filteredProjects, key = { it.id }) { project ->
+                val count = nodeCountByProject[project.id] ?: 0
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpenProject(project) },
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)),
+                    elevation = CardDefaults.cardElevation(0.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                project.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                "${count.toPersianDigits()} نود",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        IconButton(onClick = { onDeleteProject(project) }) {
+                            Icon(
+                                Icons.Outlined.Delete,
+                                contentDescription = "حذف",
+                                tint = Color(0xFFFF6B6B)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 data class NodeDialogState(val editNode: MindMapNode? = null, val parentId: Long? = null)
 
 private data class GraphNode(
@@ -384,6 +503,21 @@ private fun XMindLikeCanvasCard(
     var scale by remember { mutableFloatStateOf(0.54f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
     var manualPositions by remember { mutableStateOf<Map<Long, Offset>>(emptyMap()) }
+    val layoutSignature = remember(nodes) {
+        nodes.filter { it.isActive }
+            .sortedBy { it.id }
+            .joinToString("|") { node ->
+                "${node.id}:${node.parentId}:${node.orderIndex}:${node.title}:${node.x}:${node.y}"
+            }
+    }
+    LaunchedEffect(layoutSignature) {
+        // وقتی هنگام ساخت مایندمپ نود جدید اضافه/حذف/ویرایش می‌شود،
+        // کش موقت جابه‌جایی نودها باید با دیتابیس هماهنگ شود؛
+        // وگرنه تا قبل از بستن و باز کردن برنامه، بعضی نودها روی هم می‌افتند یا متن‌ها موقع زوم می‌لرزند.
+        manualPositions = nodes
+            .filter { it.isActive && it.x != null && it.y != null }
+            .associate { it.id to Offset(it.x!!, it.y!!) }
+    }
 
     Card(
         modifier = modifier.padding(bottom = 82.dp),
@@ -577,6 +711,13 @@ private fun XMindLikeCanvasCard(
                     color = onSurfaceVariant.copy(alpha = 0.82f),
                     style = MaterialTheme.typography.labelSmall
                 )
+                val nodeCounts = remember(nodes) { mindMapNodeCounts(nodes) }
+                Text(
+                    "نودها: کل ${nodeCounts.total.toPersianDigits()}  •  مرحله۱ ${nodeCounts.level1.toPersianDigits()}  •  مرحله۲ ${nodeCounts.level2.toPersianDigits()}  •  مرحله۳+ ${nodeCounts.level3Plus.toPersianDigits()}",
+                    color = Color(0xFF7FF7EA),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
                 val selectedInfoNode = nodes.firstOrNull { it.id == selectedNodeId && it.isActive }
                 if (selectedInfoNode != null) {
                     Card(
@@ -618,9 +759,9 @@ private fun XMindLikeCanvasCard(
                     .padding(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                TextButton(onClick = { scale = 0.54f; pan = Offset.Zero; manualPositions = emptyMap() }) { Text("مرکز") }
-                TextButton(onClick = { scale = (scale * 1.15f).coerceAtMost(3.6f) }) { Text("+") }
-                TextButton(onClick = { scale = (scale / 1.15f).coerceAtLeast(0.08f) }) { Text("−") }
+                OutlinedButton(onClick = { scale = 0.54f; pan = Offset.Zero; manualPositions = emptyMap() }, shape = RoundedCornerShape(14.dp)) { Text("مرکز") }
+                Button(onClick = { scale = (scale * 1.15f).coerceAtMost(3.6f) }, shape = RoundedCornerShape(14.dp)) { Text("+") }
+                Button(onClick = { scale = (scale / 1.15f).coerceAtLeast(0.08f) }, shape = RoundedCornerShape(14.dp)) { Text("−") }
             }
 
             if (nodes.isEmpty()) {
@@ -798,13 +939,34 @@ private fun buildXMindGraph(
     return MindGraphLayout(graphNodes, lines)
 }
 
+private data class MindMapNodeCounts(val total: Int, val level1: Int, val level2: Int, val level3Plus: Int)
+
+private fun mindMapNodeCounts(nodes: List<MindMapNode>): MindMapNodeCounts {
+    val active = nodes.filter { it.isActive }
+    if (active.isEmpty()) return MindMapNodeCounts(0, 0, 0, 0)
+    val children = active.groupBy { it.parentId }
+    var level1 = 0
+    var level2 = 0
+    var level3Plus = 0
+    fun visit(node: MindMapNode, level: Int) {
+        when (level) {
+            1 -> level1++
+            2 -> level2++
+            else -> level3Plus++
+        }
+        children[node.id].orEmpty().forEach { visit(it, level + 1) }
+    }
+    children[null].orEmpty().forEach { visit(it, 1) }
+    return MindMapNodeCounts(active.size, level1, level2, level3Plus)
+}
+
 private data class NodeStyle(val fontSize: Float, val horizontalPadding: Float, val verticalPadding: Float)
 
 private fun nodeStyle(level: Int): NodeStyle = when (level) {
-    0 -> NodeStyle(fontSize = 42f, horizontalPadding = 28f, verticalPadding = 20f)
-    1 -> NodeStyle(fontSize = 32f, horizontalPadding = 24f, verticalPadding = 16f)
-    2 -> NodeStyle(fontSize = 27f, horizontalPadding = 20f, verticalPadding = 13f)
-    else -> NodeStyle(fontSize = 23f, horizontalPadding = 18f, verticalPadding = 11f)
+    0 -> NodeStyle(fontSize = 84f, horizontalPadding = 34f, verticalPadding = 24f)
+    1 -> NodeStyle(fontSize = 42f, horizontalPadding = 24f, verticalPadding = 16f)
+    2 -> NodeStyle(fontSize = 35f, horizontalPadding = 20f, verticalPadding = 13f)
+    else -> NodeStyle(fontSize = 30f, horizontalPadding = 18f, verticalPadding = 11f)
 }
 
 private fun layoutBalancedRootSide(
@@ -831,7 +993,7 @@ private fun layoutBalancedRootSide(
         val rootHeight = nodeHeight(root.title, 1, pixelScale)
         val x = side * (centerWidth / 2f + centerGap + rootWidth / 2f)
         val autoPosition = Offset(x, cursor + blockHeight / 2f)
-        val position = manualPositions[root.id] ?: autoPosition
+        val position = manualPositions[root.id] ?: root.savedMindMapOffset() ?: autoPosition
         val color = palette[(index * 2 + colorOffset) % palette.size]
         val style = nodeStyle(1)
         graphNodes += GraphNode(root, root.title, position, rootWidth, rootHeight, color, Color.Black, 1, side, style.fontSize, style.horizontalPadding, style.verticalPadding, selectedNodeId == root.id)
@@ -865,7 +1027,7 @@ private fun layoutChildrenStrictTree(
         val height = nodeHeight(child.title, level, pixelScale)
         val x = parentPosition.x + side * (parentWidth / 2f + horizontalGap(level, pixelScale) + width / 2f)
         val autoPosition = Offset(x, cursor + blockHeight / 2f)
-        val position = manualPositions[child.id] ?: autoPosition
+        val position = manualPositions[child.id] ?: child.savedMindMapOffset() ?: autoPosition
         val style = nodeStyle(level)
         graphNodes += GraphNode(
             child,
@@ -927,13 +1089,19 @@ private fun rootFamilyColor(node: MindMapNode, activeNodes: List<MindMapNode>, c
     return palette[index % palette.size]
 }
 
+private fun MindMapNode.savedMindMapOffset(): Offset? {
+    val safeX = x
+    val safeY = y
+    return if (safeX != null && safeY != null) Offset(safeX, safeY) else null
+}
+
 private fun nodeWidth(title: String, level: Int, pixelScale: Float): Float {
     val style = nodeStyle(level)
     val paint = mindMapTextPaint(style.fontSize * pixelScale, level <= 1, Color.Black.toArgb())
     val prepared = title.preparedNodeText(level)
     val longestMeasured = prepared.lines().maxOfOrNull { paint.measureText(it) } ?: paint.measureText("بدون عنوان")
-    val minWidth = when (level) { 0 -> 250f; 1 -> 210f; 2 -> 184f; else -> 164f } * pixelScale
-    val maxWidth = when (level) { 0 -> 680f; 1 -> 620f; 2 -> 520f; else -> 460f } * pixelScale
+    val minWidth = when (level) { 0 -> 360f; 1 -> 210f; 2 -> 184f; else -> 164f } * pixelScale
+    val maxWidth = when (level) { 0 -> 900f; 1 -> 620f; 2 -> 520f; else -> 460f } * pixelScale
     val desired = longestMeasured * 1.18f + style.horizontalPadding * 2f * pixelScale
     return desired.coerceIn(minWidth, maxWidth)
 }
@@ -949,7 +1117,7 @@ private fun nodeHeight(title: String, level: Int, pixelScale: Float): Float {
         color = Color.Black.toArgb(),
         width = innerWidth
     ).height.toFloat()
-    val minHeight = when (level) { 0 -> 112f; 1 -> 82f; 2 -> 66f; else -> 56f } * pixelScale
+    val minHeight = when (level) { 0 -> 170f; 1 -> 82f; 2 -> 66f; else -> 56f } * pixelScale
     return (layoutHeight + style.verticalPadding * 2f * pixelScale + 6f * pixelScale).coerceAtLeast(minHeight)
 }
 

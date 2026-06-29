@@ -317,6 +317,14 @@ class MainViewModel(
         }
     }
 
+    fun clearNonTemplateTasksForDate(date: JalaliDate) {
+        viewModelScope.launch {
+            repository.clearNonTemplateTasksForDate(date)
+            ReminderScheduler.scheduleImmediateCheck(app)
+            _settingsMessage.value = "تسک‌های غیرتکراری این روز پاک شد."
+        }
+    }
+
     fun clearAllTasks() {
         viewModelScope.launch {
             repository.clearAllTasks()
