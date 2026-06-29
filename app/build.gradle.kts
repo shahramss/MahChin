@@ -12,8 +12,8 @@ android {
         applicationId = "com.mahchin.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 42
-        versionName = "1.18.1"
+        versionCode = 44
+        versionName = "1.18.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
