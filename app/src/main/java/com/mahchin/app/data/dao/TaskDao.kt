@@ -7,6 +7,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.mahchin.app.data.model.DailyTaskInstance
+import com.mahchin.app.data.model.FinanceTask
 import com.mahchin.app.data.model.MindMapNode
 import com.mahchin.app.data.model.MonthlyTemplateTask
 import com.mahchin.app.data.model.OneTimeTask
@@ -22,10 +23,13 @@ interface TaskDao {
     @Update
     suspend fun updateProject(project: Project)
 
-    @Query("SELECT * FROM projects WHERE isActive = 1 ORDER BY createdAt ASC")
+    @Query("UPDATE projects SET priority = :priority, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateProjectPriority(id: Long, priority: String, updatedAt: Long = System.currentTimeMillis())
+
+    @Query("SELECT * FROM projects WHERE isActive = 1 ORDER BY CASE priority WHEN 'URGENT' THEN 2 WHEN 'IMPORTANT' THEN 1 ELSE 0 END DESC, createdAt ASC")
     fun observeProjects(): Flow<List<Project>>
 
-    @Query("SELECT * FROM projects WHERE isActive = 1 ORDER BY createdAt ASC")
+    @Query("SELECT * FROM projects WHERE isActive = 1 ORDER BY CASE priority WHEN 'URGENT' THEN 2 WHEN 'IMPORTANT' THEN 1 ELSE 0 END DESC, createdAt ASC")
     suspend fun getProjects(): List<Project>
 
     @Query("SELECT * FROM projects WHERE id = :id LIMIT 1")
@@ -184,6 +188,36 @@ interface TaskDao {
 
     @Query("UPDATE monthly_template_tasks SET isActive = 0, updatedAt = :updatedAt WHERE isActive = 1")
     suspend fun deactivateAllTemplates(updatedAt: Long = System.currentTimeMillis())
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertFinanceTask(task: FinanceTask): Long
+
+    @Update
+    suspend fun updateFinanceTask(task: FinanceTask)
+
+    @Delete
+    suspend fun deleteFinanceTask(task: FinanceTask)
+
+    @Query("SELECT * FROM finance_tasks WHERE isActive = 1 ORDER BY jalaliYear DESC, jalaliMonth DESC, createdAt ASC")
+    fun observeFinanceTasks(): Flow<List<FinanceTask>>
+
+    @Query("SELECT * FROM finance_tasks WHERE isActive = 1 AND projectId = :projectId ORDER BY jalaliYear DESC, jalaliMonth DESC, createdAt ASC")
+    fun observeFinanceTasksForProject(projectId: Long): Flow<List<FinanceTask>>
+
+    @Query("SELECT * FROM finance_tasks WHERE isActive = 1 AND projectId = :projectId AND jalaliYear = :year AND jalaliMonth = :month ORDER BY isDone ASC, createdAt ASC")
+    suspend fun getFinanceTasks(projectId: Long, year: Int, month: Int): List<FinanceTask>
+
+    @Query("SELECT * FROM finance_tasks WHERE id = :id LIMIT 1")
+    suspend fun getFinanceTask(id: Long): FinanceTask?
+
+    @Query("SELECT * FROM finance_tasks ORDER BY id ASC")
+    suspend fun getAllFinanceTasksForBackup(): List<FinanceTask>
+
+    @Query("DELETE FROM finance_tasks")
+    suspend fun hardDeleteAllFinanceTasks()
+
+    @Query("UPDATE finance_tasks SET isActive = 0, updatedAt = :updatedAt")
+    suspend fun deactivateAllFinanceTasks(updatedAt: Long = System.currentTimeMillis())
 
     @Query("SELECT * FROM user_settings WHERE id = 1 LIMIT 1")
     fun observeSettings(): Flow<UserSettings?>

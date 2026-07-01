@@ -26,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -39,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.mahchin.app.data.model.TaskItem
 import com.mahchin.app.domain.JalaliCalendar
+import com.mahchin.app.domain.toEnglishDigits
 import com.mahchin.app.domain.toPersianDigits
 import com.mahchin.app.ui.components.JalaliDateDialog
 import com.mahchin.app.ui.components.MindMapAwareTaskList
@@ -63,6 +65,18 @@ fun TodayScreen(vm: MainViewModel) {
     var alarmTask by remember { mutableStateOf<TaskItem?>(null) }
     var moveGroupTasks by remember { mutableStateOf<List<TaskItem>?>(null) }
     var alarmGroupTasks by remember { mutableStateOf<List<TaskItem>?>(null) }
+    var projectSearch by remember { mutableStateOf("") }
+    var taskSearch by remember { mutableStateOf("") }
+    val visibleTasks = remember(tasks, projectSearch, taskSearch) {
+        val projectQ = projectSearch.trim().toEnglishDigits()
+        val taskQ = taskSearch.trim().toEnglishDigits()
+        tasks.filter { task ->
+            val projectOk = projectQ.isBlank() || (task.projectName ?: "بدون پروژه").contains(projectQ, ignoreCase = true)
+            val taskText = listOf(task.title, task.description, task.mindMapPath.orEmpty()).joinToString(" ")
+            val taskOk = taskQ.isBlank() || taskText.contains(taskQ, ignoreCase = true)
+            projectOk && taskOk
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -137,7 +151,35 @@ fun TodayScreen(vm: MainViewModel) {
                 }
             }
 
-            if (tasks.isEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.28f)),
+                    elevation = CardDefaults.cardElevation(0.dp)
+                ) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("جستجوی تسک‌ها", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        OutlinedTextField(
+                            value = projectSearch,
+                            onValueChange = { projectSearch = it },
+                            label = { Text("جستجو بر اساس پروژه") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = taskSearch,
+                            onValueChange = { taskSearch = it },
+                            label = { Text("جستجو بر اساس عنوان یا متن تسک") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                    }
+                }
+            }
+
+            if (visibleTasks.isEmpty()) {
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -155,8 +197,9 @@ fun TodayScreen(vm: MainViewModel) {
             } else {
                 item {
                     MindMapAwareTaskList(
-                        tasks = tasks,
+                        tasks = visibleTasks,
                         mindMapNodes = mindMapNodes,
+                        projects = projects,
                         onSetGroupStatus = { groupTasks, status -> vm.setTaskGroupStatus(groupTasks, status) },
                         onDone = { task -> vm.toggleDone(task) },
                         onEdit = { task -> editTask = task },
@@ -171,7 +214,8 @@ fun TodayScreen(vm: MainViewModel) {
                         onBatchDelete = { groupTasks -> vm.deleteTaskGroup(groupTasks) },
                         onBatchMoveTomorrow = { groupTasks -> vm.moveTaskGroupToTomorrow(groupTasks) },
                         onBatchMoveCustom = { groupTasks -> moveGroupTasks = groupTasks },
-                        onBatchAlarm = { groupTasks -> alarmGroupTasks = groupTasks }
+                        onBatchAlarm = { groupTasks -> alarmGroupTasks = groupTasks },
+                        onUpdateProjectPriority = { projectId, priority -> vm.updateProjectPriority(projectId, priority) }
                     )
                 }
             }

@@ -66,6 +66,12 @@ fun SettingsScreen(vm: MainViewModel) {
     val fullRestoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         vm.restoreFullBackupFromUri(context, uri)
     }
+    val financeBackupLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        vm.exportFinanceBackupToUri(context, uri)
+    }
+    val financeRestoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        vm.restoreFinanceBackupFromUri(context, uri)
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
@@ -173,7 +179,7 @@ fun SettingsScreen(vm: MainViewModel) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("بکاپ و بازگردانی کامل", fontWeight = FontWeight.Bold)
                     Text(
-                        "تمام تسک‌ها، قالب‌ها، مایندمپ‌ها، پروژه‌ها و تنظیمات در یک فایل ذخیره می‌شود.",
+                        "تمام تسک‌ها، قالب‌ها، مایندمپ‌ها، پروژه‌ها، مدیریت مالی و تنظیمات در یک فایل ذخیره می‌شود.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -185,6 +191,15 @@ fun SettingsScreen(vm: MainViewModel) {
                         onClick = { fullRestoreLauncher.launch(arrayOf("application/json", "text/*", "application/octet-stream")) },
                         modifier = Modifier.fillMaxWidth().height(48.dp)
                     ) { Text("بازگردانی بکاپ کامل") }
+                    Text("بکاپ فقط مدیریت مالی", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
+                    Button(
+                        onClick = { financeBackupLauncher.launch("mahchin_finance_backup_${System.currentTimeMillis()}.json") },
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) { Text("گرفتن بکاپ مالی") }
+                    OutlinedButton(
+                        onClick = { financeRestoreLauncher.launch(arrayOf("application/json", "text/*", "application/octet-stream")) },
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) { Text("بازگردانی بکاپ مالی") }
                 }
             }
         }
@@ -208,6 +223,9 @@ fun SettingsScreen(vm: MainViewModel) {
                     }
                     Button(onClick = { confirmClear = "all" }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
                         Text("پاک کردن همه تسک‌ها")
+                    }
+                    OutlinedButton(onClick = { confirmClear = "finance" }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                        Text("پاک کردن همه فاکتورهای مالی")
                     }
                 }
             }
@@ -246,11 +264,13 @@ fun SettingsScreen(vm: MainViewModel) {
         val title = when (action) {
             "today" -> "پاک کردن تسک‌های امروز"
             "templates" -> "پاک کردن تسک‌های قالب"
+            "finance" -> "پاک کردن فاکتورهای مالی"
             else -> "پاک کردن همه تسک‌ها"
         }
         val question = when (action) {
             "today" -> "آیا می‌خواهید تسک‌های امروز پاک شود؟"
             "templates" -> "آیا می‌خواهید همه تسک‌های قالب پاک شود؟"
+            "finance" -> "آیا می‌خواهید تمام فاکتورهای مالی پاک شود؟"
             else -> "آیا می‌خواهید تمام تسک‌ها پاک شود؟"
         }
         AlertDialog(
@@ -262,6 +282,7 @@ fun SettingsScreen(vm: MainViewModel) {
                     when (action) {
                         "today" -> vm.clearTodayTasks()
                         "templates" -> vm.clearAllTemplateTasks()
+                        "finance" -> vm.clearAllFinanceTasks()
                         else -> vm.clearAllTasks()
                     }
                     confirmClear = null

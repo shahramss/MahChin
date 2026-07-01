@@ -20,6 +20,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -34,7 +35,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.mahchin.app.data.model.MindMapNode
+import com.mahchin.app.data.model.Project
 import com.mahchin.app.data.model.TaskItem
+import com.mahchin.app.data.model.TaskPriority
 import com.mahchin.app.data.model.TaskStatus
 import com.mahchin.app.domain.toPersianDigits
 
@@ -42,6 +45,7 @@ import com.mahchin.app.domain.toPersianDigits
 fun MindMapAwareTaskList(
     tasks: List<TaskItem>,
     mindMapNodes: List<MindMapNode>,
+    projects: List<Project> = emptyList(),
     onSetGroupStatus: (List<TaskItem>, TaskStatus) -> Unit,
     onDone: (TaskItem) -> Unit,
     onEdit: (TaskItem) -> Unit,
@@ -56,7 +60,8 @@ fun MindMapAwareTaskList(
     onBatchDelete: (List<TaskItem>) -> Unit = { it.forEach(onDelete) },
     onBatchMoveTomorrow: (List<TaskItem>) -> Unit = { it.forEach(onMoveTomorrow) },
     onBatchMoveCustom: (List<TaskItem>) -> Unit = { it.firstOrNull()?.let(onMoveCustom) },
-    onBatchAlarm: (List<TaskItem>) -> Unit = { it.firstOrNull()?.let(onSetAlarm) }
+    onBatchAlarm: (List<TaskItem>) -> Unit = { it.firstOrNull()?.let(onSetAlarm) },
+    onUpdateProjectPriority: (Long, TaskPriority) -> Unit = { _, _ -> }
 ) {
     val activeNodes = remember(mindMapNodes) { mindMapNodes.filter { it.isActive } }
     val nodeMap = remember(activeNodes) { activeNodes.associateBy { it.id } }
@@ -82,6 +87,7 @@ fun MindMapAwareTaskList(
         .sortedWith(compareBy({ it.projectName ?: "" }, { it.mindMapPath ?: "" }, { it.createdAt }))
     val normalTasks = tasks.filterNot { it.sourceMindMapNodeId != null && nodeMap.containsKey(it.sourceMindMapNodeId) }
     val taskByNode = mindTasks.mapNotNull { t -> t.sourceMindMapNodeId?.let { it to t } }.toMap()
+    val projectMap = remember(projects) { projects.associateBy { it.id } }
 
     fun nodeHasChildren(node: MindMapNode): Boolean = children[node.id].orEmpty().any { it.isActive }
 
@@ -171,22 +177,49 @@ fun MindMapAwareTaskList(
             )
         }
 
-        normalTasks.forEach { task ->
-            TaskCard(
-                task = task,
-                selected = key(task) in selectedKeys,
-                onLongSelect = { setSelected(listOf(task)) },
-                onDone = { onDone(task) },
-                onEdit = { onEdit(task) },
-                onDelete = { onDelete(task) },
-                onMoveTomorrow = { onMoveTomorrow(task) },
-                onMoveCustom = { onMoveCustom(task) },
-                onCancel = { onCancel(task) },
-                onInProgress = { onInProgress(task) },
-                onReset = { onReset(task) },
-                onSetAlarm = { onSetAlarm(task) }
+        normalTasks
+            .groupBy { it.projectId ?: -1L }
+            .toList()
+            .sortedWith(
+                compareByDescending<Pair<Long, List<TaskItem>>> { (projectId, _) -> projectMap[projectId]?.priority?.weight ?: 0 }
+                    .thenBy { (projectId, groupTasks) -> projectMap[projectId]?.name ?: groupTasks.firstOrNull()?.projectName ?: "بدون پروژه" }
             )
-        }
+            .forEach { (projectId, groupTasksRaw) ->
+                val project = projectMap[projectId]
+                val groupTasks = groupTasksRaw.sortedWith(compareByDescending<TaskItem> { it.priority.weight }.thenBy { it.createdAt })
+                val k = "normal_project_$projectId"
+                val expanded = expandableState[k] ?: true
+                NormalProjectAccordionCard(
+                    title = project?.name ?: groupTasks.firstOrNull()?.projectName ?: "بدون پروژه",
+                    subtitle = "${groupTasks.size.toPersianDigits()} تسک معمولی",
+                    priority = project?.priority ?: TaskPriority.NORMAL,
+                    canEditPriority = project != null,
+                    expanded = expanded,
+                    selected = groupTasks.any { key(it) in selectedKeys },
+                    onToggleExpand = { expandableState[k] = !expanded },
+                    onLongSelect = { setSelected(groupTasks) },
+                    onPriorityChange = { priority -> if (project != null) onUpdateProjectPriority(project.id, priority) }
+                )
+                if (expanded) {
+                    groupTasks.forEach { task ->
+                        TaskCard(
+                            task = task,
+                            selected = key(task) in selectedKeys,
+                            onLongSelect = { setSelected(listOf(task)) },
+                            onDone = { onDone(task) },
+                            onEdit = { onEdit(task) },
+                            onDelete = { onDelete(task) },
+                            onMoveTomorrow = { onMoveTomorrow(task) },
+                            onMoveCustom = { onMoveCustom(task) },
+                            onCancel = { onCancel(task) },
+                            onInProgress = { onInProgress(task) },
+                            onReset = { onReset(task) },
+                            onSetAlarm = { onSetAlarm(task) },
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
+                }
+            }
 
         mindTasks.groupBy { it.projectId ?: -1L }.forEach { (projectId, projectTasks) ->
             val projectName = projectTasks.firstOrNull()?.projectName ?: "بدون پروژه"
@@ -367,6 +400,61 @@ private fun ParentTaskAccordionCard(
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
+        }
+    }
+    Spacer(Modifier.height(2.dp))
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun NormalProjectAccordionCard(
+    title: String,
+    subtitle: String,
+    priority: TaskPriority,
+    canEditPriority: Boolean,
+    expanded: Boolean,
+    selected: Boolean,
+    onToggleExpand: () -> Unit,
+    onLongSelect: () -> Unit,
+    onPriorityChange: (TaskPriority) -> Unit
+) {
+    val priorityColor = when (priority) {
+        TaskPriority.URGENT -> Color(0xFFFF6B6B)
+        TaskPriority.IMPORTANT -> Color(0xFFFFC857)
+        TaskPriority.NORMAL -> MaterialTheme.colorScheme.primary
+    }
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(onClick = onToggleExpand, onLongClick = onLongSelect),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = if (selected) priorityColor.copy(alpha = 0.20f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.56f)),
+        border = BorderStroke(1.dp, priorityColor.copy(alpha = if (selected) 0.78f else 0.38f)),
+        elevation = CardDefaults.cardElevation(0.dp)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(title.toPersianDigits(), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+                    Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                }
+                Text(priority.fa, color = priorityColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                Text(if (expanded) "⌄" else "›", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            }
+            if (canEditPriority) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TaskPriority.entries.forEach { p ->
+                        TextButton(
+                            onClick = { onPriorityChange(p) },
+                            modifier = Modifier.weight(1f)
+                        ) { Text(p.fa, color = if (priority == p) priorityColor else MaterialTheme.colorScheme.onSurfaceVariant) }
+                    }
+                }
+            }
         }
     }
     Spacer(Modifier.height(2.dp))

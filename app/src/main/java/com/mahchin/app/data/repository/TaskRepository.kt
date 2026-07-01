@@ -2,6 +2,7 @@ package com.mahchin.app.data.repository
 
 import com.mahchin.app.data.dao.TaskDao
 import com.mahchin.app.data.model.DailyTaskInstance
+import com.mahchin.app.data.model.FinanceTask
 import com.mahchin.app.data.model.MindMapNode
 import com.mahchin.app.data.model.MonthlyTemplateTask
 import com.mahchin.app.data.model.OneTimeTask
@@ -30,6 +31,7 @@ class TaskRepository(private val dao: TaskDao) {
     val templatesFlow: Flow<List<MonthlyTemplateTask>> = dao.observeTemplates()
     val projectsFlow: Flow<List<Project>> = dao.observeProjects()
     val allMindMapNodesFlow: Flow<List<MindMapNode>> = dao.observeAllMindMapNodes()
+    val financeTasksFlow: Flow<List<FinanceTask>> = dao.observeFinanceTasks()
 
     suspend fun getSettingsOrDefault(): UserSettings = withContext(Dispatchers.IO) {
         dao.getSettings() ?: UserSettings().also { dao.upsertSettings(it) }
@@ -59,6 +61,10 @@ class TaskRepository(private val dao: TaskDao) {
         dao.getProject(id)?.let { project ->
             dao.updateProject(project.copy(name = clean, updatedAt = System.currentTimeMillis()))
         }
+    }
+
+    suspend fun updateProjectPriority(id: Long, priority: TaskPriority) = withContext(Dispatchers.IO) {
+        dao.updateProjectPriority(id, priority.name, System.currentTimeMillis())
     }
 
     suspend fun deleteProject(id: Long): Long? = withContext(Dispatchers.IO) {
@@ -405,6 +411,76 @@ class TaskRepository(private val dao: TaskDao) {
     }
 
 
+    fun observeFinanceTasks(): Flow<List<FinanceTask>> = dao.observeFinanceTasks()
+
+    suspend fun addFinanceTask(projectId: Long, month: JalaliDate, title: String, amount: Long, customerDateKey: String? = null) = withContext(Dispatchers.IO) {
+        if (title.isBlank()) return@withContext
+        dao.insertFinanceTask(
+            FinanceTask(
+                projectId = projectId,
+                title = title.trim(),
+                amount = amount.coerceAtLeast(0),
+                jalaliYear = month.year,
+                jalaliMonth = month.month,
+                customerPaymentDateKey = customerDateKey
+            )
+        )
+    }
+
+    suspend fun toggleFinanceDone(id: Long, done: Boolean, date: JalaliDate = JalaliCalendar.today()) = withContext(Dispatchers.IO) {
+        dao.getFinanceTask(id)?.let { task ->
+            dao.updateFinanceTask(
+                task.copy(
+                    isDone = done,
+                    completedDateKey = if (done) date.key else null,
+                    updatedAt = System.currentTimeMillis()
+                )
+            )
+        }
+    }
+
+    suspend fun deleteFinanceTask(id: Long) = withContext(Dispatchers.IO) {
+        dao.getFinanceTask(id)?.let { dao.deleteFinanceTask(it) }
+    }
+
+    suspend fun carryOpenFinanceTasksToNextMonth(projectId: Long, month: JalaliDate): Int = withContext(Dispatchers.IO) {
+        val next = JalaliCalendar.nextMonth(JalaliDate(month.year, month.month, 1))
+        val open = dao.getFinanceTasks(projectId, month.year, month.month).filter { !it.isDone && it.isActive }
+        open.forEach { task ->
+            dao.insertFinanceTask(
+                task.copy(
+                    id = 0,
+                    jalaliYear = next.year,
+                    jalaliMonth = next.month,
+                    createdAt = System.currentTimeMillis(),
+                    updatedAt = System.currentTimeMillis(),
+                    completedDateKey = null,
+                    isDone = false
+                )
+            )
+        }
+        open.size
+    }
+
+    suspend fun clearAllFinanceTasks() = withContext(Dispatchers.IO) {
+        dao.deactivateAllFinanceTasks(System.currentTimeMillis())
+    }
+
+    suspend fun exportFinanceBackupJson(): String = withContext(Dispatchers.IO) {
+        JSONObject()
+            .put("type", "mahchin_finance_backup")
+            .put("backupVersion", 1)
+            .put("exportedAt", System.currentTimeMillis())
+            .put("financeTasks", JSONArray().apply { dao.getAllFinanceTasksForBackup().forEach { put(it.toJson()) } })
+            .toString(2)
+    }
+
+    suspend fun restoreFinanceBackupJson(jsonText: String): Unit = withContext(Dispatchers.IO) {
+        val root = JSONObject(jsonText)
+        require(root.optString("type") == "mahchin_finance_backup") { "فایل بکاپ مالی ماه‌چین نیست." }
+        root.optJSONArray("financeTasks")?.forEachObject { dao.insertFinanceTask(it.toFinanceTask()) }
+    }
+
     suspend fun clearTasksForDate(date: JalaliDate) = withContext(Dispatchers.IO) {
         dao.deleteDailyInstancesForDate(date.year, date.month, date.day)
         dao.deleteOneTimeTasksForDate(date.year, date.month, date.day)
@@ -451,6 +527,7 @@ class TaskRepository(private val dao: TaskDao) {
             .put("templates", JSONArray().apply { dao.getAllTemplatesForBackup().forEach { put(it.toJson()) } })
             .put("dailyTasks", JSONArray().apply { dao.getAllDailyInstancesForBackup().forEach { put(it.toJson()) } })
             .put("oneTimeTasks", JSONArray().apply { dao.getAllOneTimeTasksForBackup().forEach { put(it.toJson()) } })
+            .put("financeTasks", JSONArray().apply { dao.getAllFinanceTasksForBackup().forEach { put(it.toJson()) } })
             .put("settings", (dao.getSettings() ?: UserSettings()).toJson())
             .toString(2)
     }
@@ -464,6 +541,7 @@ class TaskRepository(private val dao: TaskDao) {
         dao.hardDeleteAllOneTimeTasks()
         dao.hardDeleteAllTemplates()
         dao.hardDeleteAllMindMapNodes()
+        dao.hardDeleteAllFinanceTasks()
         dao.hardDeleteAllProjects()
         dao.hardDeleteSettings()
 
@@ -472,6 +550,7 @@ class TaskRepository(private val dao: TaskDao) {
         root.optJSONArray("templates")?.forEachObject { dao.insertTemplate(it.toMonthlyTemplateTask()) }
         root.optJSONArray("dailyTasks")?.forEachObject { dao.upsertDailyInstanceForRestore(it.toDailyTaskInstance()) }
         root.optJSONArray("oneTimeTasks")?.forEachObject { dao.insertOneTimeTask(it.toOneTimeTask()) }
+        root.optJSONArray("financeTasks")?.forEachObject { dao.insertFinanceTask(it.toFinanceTask()) }
         root.optJSONObject("settings")?.let { dao.upsertSettings(it.toUserSettings()) }
         if (dao.getProjects().isEmpty()) ensureDefaultProject()
     }
@@ -534,6 +613,7 @@ class TaskRepository(private val dao: TaskDao) {
         .put("id", id)
         .put("name", name)
         .put("colorHex", colorHex)
+        .put("priority", priority.name)
         .put("createdAt", createdAt)
         .put("updatedAt", updatedAt)
         .put("isActive", isActive)
@@ -611,6 +691,20 @@ class TaskRepository(private val dao: TaskDao) {
         .putNullable("movedFromDate", movedFromDate)
         .putNullable("movedToDate", movedToDate)
 
+    private fun FinanceTask.toJson(): JSONObject = JSONObject()
+        .put("id", id)
+        .put("projectId", projectId)
+        .put("title", title)
+        .put("amount", amount)
+        .put("jalaliYear", jalaliYear)
+        .put("jalaliMonth", jalaliMonth)
+        .putNullable("customerPaymentDateKey", customerPaymentDateKey)
+        .putNullable("completedDateKey", completedDateKey)
+        .put("isDone", isDone)
+        .put("createdAt", createdAt)
+        .put("updatedAt", updatedAt)
+        .put("isActive", isActive)
+
     private fun UserSettings.toJson(): JSONObject = JSONObject()
         .put("id", id)
         .put("reminderIntensity", reminderIntensity.name)
@@ -626,6 +720,7 @@ class TaskRepository(private val dao: TaskDao) {
         id = optLong("id", 0L),
         name = optString("name", "عمومی"),
         colorHex = optString("colorHex", "#D4AF37"),
+        priority = enumOrDefault("priority", TaskPriority.NORMAL),
         createdAt = optLong("createdAt", System.currentTimeMillis()),
         updatedAt = optLong("updatedAt", System.currentTimeMillis()),
         isActive = optBoolean("isActive", true)
@@ -706,6 +801,21 @@ class TaskRepository(private val dao: TaskDao) {
         updatedAt = optLong("updatedAt", System.currentTimeMillis()),
         movedFromDate = stringOrNull("movedFromDate"),
         movedToDate = stringOrNull("movedToDate")
+    )
+
+    private fun JSONObject.toFinanceTask(): FinanceTask = FinanceTask(
+        id = optLong("id", 0L),
+        projectId = optLong("projectId", 0L),
+        title = optString("title", "هزینه"),
+        amount = optLong("amount", 0L),
+        jalaliYear = optInt("jalaliYear", 1405),
+        jalaliMonth = optInt("jalaliMonth", 1),
+        customerPaymentDateKey = stringOrNull("customerPaymentDateKey"),
+        completedDateKey = stringOrNull("completedDateKey"),
+        isDone = optBoolean("isDone", false),
+        createdAt = optLong("createdAt", System.currentTimeMillis()),
+        updatedAt = optLong("updatedAt", System.currentTimeMillis()),
+        isActive = optBoolean("isActive", true)
     )
 
     private fun JSONObject.toUserSettings(): UserSettings = UserSettings(

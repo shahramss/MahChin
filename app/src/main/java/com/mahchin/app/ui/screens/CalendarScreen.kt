@@ -98,6 +98,7 @@ fun CalendarScreen(vm: MainViewModel) {
                     MindMapAwareTaskList(
                         tasks = selectedTasks,
                         mindMapNodes = mindMapNodes,
+                        projects = projects,
                         onSetGroupStatus = { groupTasks, status -> vm.setTaskGroupStatus(groupTasks, status) },
                         onDone = { task -> vm.toggleDone(task) },
                         onEdit = { task -> editTask = task },
@@ -112,7 +113,8 @@ fun CalendarScreen(vm: MainViewModel) {
                         onBatchDelete = { groupTasks -> vm.deleteTaskGroup(groupTasks) },
                         onBatchMoveTomorrow = { groupTasks -> vm.moveTaskGroupToTomorrow(groupTasks) },
                         onBatchMoveCustom = { groupTasks -> moveGroupTasks = groupTasks },
-                        onBatchAlarm = { groupTasks -> alarmGroupTasks = groupTasks }
+                        onBatchAlarm = { groupTasks -> alarmGroupTasks = groupTasks },
+                        onUpdateProjectPriority = { projectId, priority -> vm.updateProjectPriority(projectId, priority) }
                     )
                 }
             }

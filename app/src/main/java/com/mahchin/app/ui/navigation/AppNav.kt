@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Today
@@ -27,6 +28,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.mahchin.app.ui.screens.CalendarScreen
+import com.mahchin.app.ui.screens.FinanceScreen
 import com.mahchin.app.ui.screens.MonthlyTemplateScreen
 import com.mahchin.app.ui.screens.MindMapScreen
 import com.mahchin.app.ui.screens.ReportScreen
@@ -40,13 +42,14 @@ sealed class BottomItem(val route: String, val title: String, val icon: @Composa
     data object Template : BottomItem("template", "قالب", { Icon(Icons.Default.ViewList, contentDescription = null) })
     data object MindMap : BottomItem("mindmap", "مایندمپ", { Icon(Icons.Default.ViewList, contentDescription = null) })
     data object Report : BottomItem("report", "گزارش", { Icon(Icons.Default.Assessment, contentDescription = null) })
+    data object Finance : BottomItem("finance", "مالی", { Icon(Icons.Default.AccountBalanceWallet, contentDescription = null) })
     data object Settings : BottomItem("settings", "تنظیمات", { Icon(Icons.Default.Settings, contentDescription = null) })
 }
 
 @Composable
 fun MahChinApp(viewModel: MainViewModel) {
     val navController = rememberNavController()
-    val items = listOf(BottomItem.Today, BottomItem.Calendar, BottomItem.Template, BottomItem.MindMap, BottomItem.Report, BottomItem.Settings)
+    val items = listOf(BottomItem.Today, BottomItem.Calendar, BottomItem.Template, BottomItem.MindMap, BottomItem.Report, BottomItem.Finance, BottomItem.Settings)
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -97,6 +100,7 @@ fun MahChinApp(viewModel: MainViewModel) {
             composable(BottomItem.Template.route) { MonthlyTemplateScreen(viewModel) }
             composable(BottomItem.MindMap.route) { MindMapScreen(viewModel) }
             composable(BottomItem.Report.route) { ReportScreen(viewModel) }
+            composable(BottomItem.Finance.route) { FinanceScreen(viewModel) }
             composable(BottomItem.Settings.route) { SettingsScreen(viewModel) }
         }
     }

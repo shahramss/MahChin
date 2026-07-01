@@ -9,6 +9,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.mahchin.app.data.dao.TaskDao
 import com.mahchin.app.data.model.DailyTaskInstance
+import com.mahchin.app.data.model.FinanceTask
 import com.mahchin.app.data.model.MindMapNode
 import com.mahchin.app.data.model.MonthlyTemplateTask
 import com.mahchin.app.data.model.OneTimeTask
@@ -22,9 +23,10 @@ import com.mahchin.app.data.model.UserSettings
         OneTimeTask::class,
         UserSettings::class,
         Project::class,
-        MindMapNode::class
+        MindMapNode::class,
+        FinanceTask::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -62,6 +64,15 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                addColumnIfMissing(db, "projects", "priority", "TEXT NOT NULL DEFAULT 'NORMAL'")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `finance_tasks` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `projectId` INTEGER NOT NULL, `title` TEXT NOT NULL, `amount` INTEGER NOT NULL, `jalaliYear` INTEGER NOT NULL, `jalaliMonth` INTEGER NOT NULL, `customerPaymentDateKey` TEXT, `completedDateKey` TEXT, `isDone` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `isActive` INTEGER NOT NULL)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_finance_tasks_projectId` ON `finance_tasks` (`projectId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_finance_tasks_jalaliYear_jalaliMonth` ON `finance_tasks` (`jalaliYear`, `jalaliMonth`)")
+            }
+        }
+
         private fun addColumnIfMissing(db: SupportSQLiteDatabase, table: String, column: String, type: String) {
             db.query("PRAGMA table_info(`$table`)").use { cursor ->
                 var exists = false
@@ -82,7 +93,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "mahchin.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .build()
                     .also { INSTANCE = it }
             }

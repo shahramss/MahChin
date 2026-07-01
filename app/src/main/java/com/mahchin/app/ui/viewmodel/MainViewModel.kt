@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.mahchin.app.data.model.FinanceTask
 import com.mahchin.app.data.model.MindMapNode
 import com.mahchin.app.data.model.MonthlyTemplateTask
 import com.mahchin.app.data.model.Project
@@ -73,6 +74,12 @@ class MainViewModel(
         emptyList()
     )
 
+    val financeTasks: StateFlow<List<FinanceTask>> = repository.financeTasksFlow.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList()
+    )
+
     @OptIn(ExperimentalCoroutinesApi::class)
     val mindMapNodes: StateFlow<List<MindMapNode>> = selectedProjectId.flatMapLatest { id ->
         if (id == null) kotlinx.coroutines.flow.flowOf(emptyList()) else repository.observeMindMapNodes(id)
@@ -129,6 +136,10 @@ class MainViewModel(
     fun updateProject(projectId: Long, name: String) {
         if (name.isBlank()) return
         viewModelScope.launch { repository.updateProject(projectId, name) }
+    }
+
+    fun updateProjectPriority(projectId: Long, priority: TaskPriority) {
+        viewModelScope.launch { repository.updateProjectPriority(projectId, priority) }
     }
 
     fun deleteProject(projectId: Long) {
@@ -461,6 +472,66 @@ class MainViewModel(
                 _settingsMessage.value = "مایندمپ بازگردانی شد."
             }.onFailure {
                 _settingsMessage.value = "خطا در بازگردانی مایندمپ: ${it.message ?: "نامشخص"}"
+            }
+        }
+    }
+
+    fun addFinanceTask(projectId: Long, month: JalaliDate, title: String, amount: Long, customerDateKey: String? = null) {
+        if (title.isBlank()) return
+        viewModelScope.launch {
+            repository.addFinanceTask(projectId, month, title, amount, customerDateKey ?: month.key)
+            _settingsMessage.value = "تسک مالی اضافه شد."
+        }
+    }
+
+    fun toggleFinanceDone(taskId: Long, done: Boolean) {
+        viewModelScope.launch { repository.toggleFinanceDone(taskId, done, today) }
+    }
+
+    fun deleteFinanceTask(taskId: Long) {
+        viewModelScope.launch { repository.deleteFinanceTask(taskId) }
+    }
+
+    fun carryOpenFinanceToNextMonth(projectId: Long, month: JalaliDate) {
+        viewModelScope.launch {
+            val count = repository.carryOpenFinanceTasksToNextMonth(projectId, month)
+            _settingsMessage.value = "${count} هزینه باز به ماه بعد منتقل شد."
+        }
+    }
+
+    fun clearAllFinanceTasks() {
+        viewModelScope.launch {
+            repository.clearAllFinanceTasks()
+            _settingsMessage.value = "همه فاکتورهای مالی پاک شد."
+        }
+    }
+
+    fun exportFinanceBackupToUri(context: Context, uri: Uri?) {
+        if (uri == null) return
+        viewModelScope.launch {
+            runCatching {
+                val json = repository.exportFinanceBackupJson()
+                context.contentResolver.openOutputStream(uri)?.use { out -> out.write(json.toByteArray(Charsets.UTF_8)) }
+                    ?: error("فایل باز نشد")
+            }.onSuccess {
+                _settingsMessage.value = "بکاپ مالی ذخیره شد."
+            }.onFailure {
+                _settingsMessage.value = "خطا در بکاپ مالی: ${it.message ?: "نامشخص"}"
+            }
+        }
+    }
+
+    fun restoreFinanceBackupFromUri(context: Context, uri: Uri?) {
+        if (uri == null) return
+        viewModelScope.launch {
+            runCatching {
+                val json = context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                    ?: error("فایل خوانده نشد")
+                repository.restoreFinanceBackupJson(json)
+            }.onSuccess {
+                _settingsMessage.value = "بکاپ مالی بازگردانی شد."
+            }.onFailure {
+                _settingsMessage.value = "خطا در بازگردانی مالی: ${it.message ?: "نامشخص"}"
             }
         }
     }
