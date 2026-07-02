@@ -31,8 +31,10 @@ class TaskAlarmReceiver : BroadcastReceiver() {
             .setStyle(NotificationCompat.BigTextStyle().bigText(if (project.isBlank()) title else "پروژه: $project\n$title"))
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(true)
             .setContentIntent(openIntent)
+            .setFullScreenIntent(openIntent, true)
             .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM))
             .setVibrate(longArrayOf(0, 500, 200, 500, 200, 700))
 
@@ -44,5 +46,7 @@ class TaskAlarmReceiver : BroadcastReceiver() {
     companion object {
         const val EXTRA_TITLE = "extra_title"
         const val EXTRA_PROJECT = "extra_project"
+        const val EXTRA_TASK_ID = "extra_task_id"
+        const val EXTRA_TASK_ORIGIN = "extra_task_origin"
     }
 }
